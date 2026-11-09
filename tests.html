@@ -1,1 +1,174 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>模型驗證測試｜旅行流行病學工具箱</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body data-page="tests">
+<div id="site-header"></div>
+<section class="hero hero-sm"><div class="inner"><p class="eyebrow">品質檢查</p><h1>模型驗證測試</h1><p>用解析解、經典表列值與已發表結果檢查 epi.js 中各模型的計算。修改程式碼後請重新執行。</p></div></section>
+<main id="main" class="container">
+  <div class="error" id="error" role="alert" hidden></div>
+  <div class="kpis" id="summary"></div>
+  <div class="btn-row" style="margin-bottom:20px"><button class="btn" id="rerun">重新執行</button></div>
+  <div class="table-wrap" id="results"></div>
+  <p class="note">隨機模擬的測試使用固定亂數種子，容許誤差依蒙地卡羅標準誤設定。依據欄中「解析值」指有封閉解的結果，「性質」指模型必須滿足的條件，「文獻」指與已發表數值比對。</p>
+</main>
+<div id="site-footer"></div>
+<script src="assets/js/epi.js"></script>
+<script src="assets/js/layout.js"></script>
+<script>
+const near = (got, exp, tol) => ({ got, exp, tol: `± ${tol}`, ok: Math.abs(got - exp) <= tol });
+const rel = (got, exp, r) => ({ got, exp, tol: `± ${r * 100}%`, ok: Math.abs(got - exp) <= r * Math.abs(exp) });
+const prop = (ok, got, exp) => ({ got, exp, tol: '—', ok: Boolean(ok) });
 
+let gilCache = null;
+function gillespieRuns() {
+  if (!gilCache) {
+    Epi.setSeed(123);
+    const N = 500, runs = 1000;
+    const sims = Array.from({ length: runs }, () => Epi.seirGillespie({ N, I0: 1, R0: 2, incub: 5, infect: 5, days: 400 }));
+    const major = sims.filter(s => s.finalSize >= 0.1 * N);
+    gilCache = { pMajor: major.length / runs, attack: Epi.mean(major.map(s => s.finalSize / N)) };
+  }
+  return gilCache;
+}
+function coriSynthetic(R) {
+  const w = Epi.discretizeGamma(4.7, 2.9, 30), T = 40;
+  const local = new Array(T).fill(0), imp = new Array(T).fill(0);
+  imp[0] = 1000;
+  for (let t = 1; t < T; t++) {
+    let lam = 0;
+    for (let s = 1; s <= t && s < w.length; s++) lam += w[s] * (local[t - s] + imp[t - s]);
+    local[t] = R * lam;
+  }
+  const est = Epi.coriRt(local, imp, w, 7, 1, 5);
+  return est[est.length - 1].mean;
+}
+const QBASE = { n: 20000, W: 7, ml: 1.621, sl: 0.418, asym: 0.3, excludePre: false, pre: 2, post: 7,
+  symptomDetect: false, tests: [], detPre: 3, detPost: 14, sens: 0.8 };
+const qsim = (o) => { Epi.setSeed(99); return Epi.quarantineSim({ ...QBASE, ...o }); };
+
+const TESTS = [
+  ['特殊函數', 'qnorm(0.975)', '解析值', () => near(Epi.qnorm(0.975), 1.959964, 1e-5)],
+  ['特殊函數', 'qnorm(0.025)', '解析值', () => near(Epi.qnorm(0.025), -1.959964, 1e-5)],
+  ['特殊函數', 'lgamma(10) = ln(9!)', '解析值', () => near(Epi.lgamma(10), Math.log(362880), 1e-9)],
+  ['特殊函數', 'P(1, 2) = 1 − e⁻²', '解析值', () => near(Epi.pgamma(2, 1, 1), 1 - Math.exp(-2), 1e-12)],
+  ['特殊函數', 'P(2, 1) = 1 − 2e⁻¹（級數展開）', '解析值', () => near(Epi.pgamma(1, 2, 1), 1 - 2 * Math.exp(-1), 1e-12)],
+  ['特殊函數', 'P(2, 5) = 1 − 6e⁻⁵（連分數）', '解析值', () => near(Epi.pgamma(5, 2, 1), 1 - 6 * Math.exp(-5), 1e-12)],
+  ['特殊函數', 'Gamma(1, 尺度 2) 中位數 = 2 ln 2', '解析值', () => near(Epi.qgamma(0.5, 1, 2), 2 * Math.log(2), 1e-9)],
+
+  ['基礎計算', 'Poisson 精確區間 x = 10：下限', '文獻（Garwood 1936）', () => near(Epi.poissonRateCI(10, 1).lo, 4.7954, 1e-3)],
+  ['基礎計算', 'Poisson 精確區間 x = 10：上限', '文獻（Garwood 1936）', () => near(Epi.poissonRateCI(10, 1).hi, 18.3904, 1e-3)],
+  ['基礎計算', 'Poisson 精確區間 x = 0：上限 = −ln(0.025)', '解析值', () => near(Epi.poissonRateCI(0, 1).hi, -Math.log(0.025), 1e-9)],
+  ['基礎計算', '2×2 表 (20, 80, 10, 90)：RR = 2', '解析值', () => near(Epi.twoByTwo(20, 80, 10, 90).rr, 2, 1e-12)],
+  ['基礎計算', '2×2 表 (20, 80, 10, 90)：OR = 2.25', '解析值', () => near(Epi.twoByTwo(20, 80, 10, 90).or, 2.25, 1e-12)],
+  ['基礎計算', 'RR 信賴區間在對數尺度對稱（下限 × 上限 = RR²）', '性質', () => { const r = Epi.twoByTwo(20, 80, 10, 90); return near(r.rrCI[0] * r.rrCI[1], 4, 1e-9); }],
+  ['基礎計算', '含 0 的格子觸發 Haldane 校正', '性質', () => prop(Epi.twoByTwo(0, 10, 5, 5).corrected, '已校正', '已校正')],
+  ['基礎計算', '單一比例樣本數 p = 0.5、d = 0.05', '解析值', () => near(Epi.sampleSizeProportion(0.5, 0.05), 385, 0)],
+  ['基礎計算', '兩組比例樣本數 0.2 vs 0.1（α 0.05，檢定力 0.8）', '解析值', () => near(Epi.sampleSizeTwoProportions(0.2, 0.1), 199, 0)],
+  ['基礎計算', 'riskFromRate(ln 2, 1) = 0.5', '解析值', () => near(Epi.riskFromRate(Math.log(2), 1), 0.5, 1e-12)],
+
+  ['分支過程', 'Poisson，R = 2：滅絕機率', '解析值', () => near(Epi.extinctionProb(2, Infinity), 0.203188, 1e-5)],
+  ['分支過程', '幾何分佈（k = 1），R = 2：q = 1/R', '解析值', () => near(Epi.extinctionProb(2, 1), 0.5, 1e-9)],
+  ['分支過程', '幾何分佈（k = 1），R = 4：q = 1/R', '解析值', () => near(Epi.extinctionProb(4, 1), 0.25, 1e-9)],
+  ['分支過程', 'R ≤ 1 時必然滅絕', '性質', () => near(Epi.extinctionProb(0.9, 0.5), 1, 0)],
+  ['分支過程', 'R = 2.5、k = 0.16：q 為 G(q) 的固定點', '性質', () => {
+    const R = 2.5, k = 0.16, q = Epi.extinctionProb(R, k), G = Math.pow(1 + (R / k) * (1 - q), -k);
+    return prop(Math.abs(G - q) < 1e-10 && q < 1, q, 'G(q) = q 且 q < 1');
+  }],
+  ['分支過程', 'k 越小，滅絕機率越高', '性質', () => {
+    const a = Epi.extinctionProb(2.5, 0.1), b = Epi.extinctionProb(2.5, 1), c = Epi.extinctionProb(2.5, Infinity);
+    return prop(a > b && b > c, `${a.toFixed(3)} > ${b.toFixed(3)} > ${c.toFixed(3)}`, '遞減');
+  }],
+
+  ['輸出病例', 'Imai 等（2020）武漢點估計：3 例、每日 3,301 名旅客、1,900 萬人口、10 天', '文獻（約 1,723 例）', () => rel(Epi.imaiEstimate(3, 3301, 19e6, 10).estimate, 1723, 0.01)],
+
+  ['空氣傳播', 'Wells–Riley：劑量 1 時 P = 1 − e⁻¹', '解析值', () => near(Epi.wellsRiley({ I: 1, q: 1, p: 1, t: 1, Q: 1 }).P, 1 - Math.exp(-1), 1e-12)],
+  ['空氣傳播', 'Wells–Riley：雙方口罩各 50%，劑量 = 0.25', '解析值', () => near(Epi.wellsRiley({ I: 1, q: 1, p: 1, t: 1, Q: 1, maskI: 0.5, maskS: 0.5 }).dose, 0.25, 1e-12)],
+  ['空氣傳播', 'Rudnick–Milton：f = 0.02，指數項 = 1', '解析值', () => near(Epi.rudnickMilton({ C: 1180, C0: 420, Ca: 38000, I: 1, q: 50, t: 1, n: 1 }).P, 1 - Math.exp(-1), 1e-9)],
+
+  ['SEIR', '確定性模型人數守恆', '性質', () => {
+    const out = Epi.seirODE({ N: 1000, I0: 1, R0: 3, incub: 4, infect: 6, days: 200 });
+    const err = Math.max(...out.map(d => Math.abs(d.S + d.E + d.I + d.R - 1000)));
+    return near(err, 0, 1e-6);
+  }],
+  ['SEIR', '確定性模型最終規模，R₀ = 2（final size 方程式 z = 1 − e^(−R₀z)）', '解析值', () => {
+    const out = Epi.seirODE({ N: 1e6, I0: 1, R0: 2, incub: 5, infect: 5, days: 500 });
+    return rel((1e6 - out[out.length - 1].S) / 1e6, 0.796812, 0.005);
+  }],
+  ['SEIR', 'Gillespie：大規模爆發比例 ≈ 1 − 1/R₀（R₀ = 2，1,000 次）', '解析值', () => near(gillespieRuns().pMajor, 0.5, 0.05)],
+  ['SEIR', 'Gillespie：大規模爆發的平均侵襲率 ≈ 0.797（N = 500）', '解析值', () => near(gillespieRuns().attack, 0.797, 0.03)],
+
+  ['即時 Rt', '序列間隔離散化總和 = 1，w₀ = 0', '性質', () => {
+    const w = Epi.discretizeGamma(4.7, 2.9, 30);
+    return prop(Math.abs(w.reduce((a, b) => a + b, 0) - 1) < 1e-12 && w[0] === 0, w.reduce((a, b) => a + b, 0), 1);
+  }],
+  ['即時 Rt', '合成資料還原 Rt = 1.5', '解析值', () => rel(coriSynthetic(1.5), 1.5, 0.01)],
+  ['即時 Rt', '合成資料還原 Rt = 0.8', '解析值', () => rel(coriSynthetic(0.8), 0.8, 0.01)],
+  ['即時 Rt', '只有輸入病例、沒有本土病例時 Rt 接近 0', '性質', () => {
+    const w = Epi.discretizeGamma(4.7, 2.9, 30), T = 30;
+    const est = Epi.coriRt(new Array(T).fill(0), new Array(T).fill(10), w, 7, 1, 5);
+    const m = est[est.length - 1].mean;
+    return prop(m < 0.02, m, '< 0.02');
+  }],
+
+  ['檢疫策略', '不檢疫、不檢測：殘留比例 = 1', '性質', () => near(qsim({ Q: 0 }).residualFraction, 1, 1e-12)],
+  ['檢疫策略', '不檢疫、不檢測：被發現比例 = 0', '性質', () => near(qsim({ Q: 0 }).detectedFraction, 0, 0)],
+  ['檢疫策略', '檢疫越久，殘留比例越低（0、7、14 天）', '性質', () => {
+    const r = [0, 7, 14].map(Q => qsim({ Q, symptomDetect: true }).residualFraction);
+    return prop(r[0] > r[1] && r[1] > r[2], r.map(x => x.toFixed(3)).join(' > '), '遞減');
+  }],
+  ['檢疫策略', '加入檢測後殘留比例不增加（檢疫 5 天）', '性質', () => {
+    const a = qsim({ Q: 5 }).residualFraction, b = qsim({ Q: 5, tests: [5] }).residualFraction;
+    return prop(b <= a, `${b.toFixed(3)} ≤ ${a.toFixed(3)}`, '不增加');
+  }],
+
+  ['亂數與分佈', '固定種子可重現', '性質', () => {
+    Epi.setSeed(1); const a = Epi.runif(); Epi.setSeed(1); const b = Epi.runif();
+    return prop(a === b, a, b);
+  }],
+  ['亂數與分佈', 'Gamma(2, 尺度 3) 抽樣平均 = 6', '解析值', () => {
+    Epi.setSeed(5); const xs = Array.from({ length: 20000 }, () => Epi.rgamma(2, 3));
+    return near(Epi.mean(xs), 6, 0.15);
+  }],
+  ['亂數與分佈', 'Gamma(0.5, 尺度 1) 抽樣平均 = 0.5（shape < 1 分支）', '解析值', () => {
+    Epi.setSeed(6); const xs = Array.from({ length: 20000 }, () => Epi.rgamma(0.5, 1));
+    return near(Epi.mean(xs), 0.5, 0.02);
+  }],
+  ['亂數與分佈', 'Beta(2, 5) 抽樣平均 = 2/7', '解析值', () => {
+    Epi.setSeed(8); const xs = Array.from({ length: 20000 }, () => Epi.rbeta(2, 5));
+    return near(Epi.mean(xs), 2 / 7, 0.005);
+  }],
+  ['亂數與分佈', 'Beta 動差法：平均 0.3、標準差 0.1 → (6, 14)', '解析值', () => {
+    const [a, b] = Epi.betaFromMoments(0.3, 0.1);
+    return prop(Math.abs(a - 6) < 1e-9 && Math.abs(b - 14) < 1e-9, `(${a.toFixed(4)}, ${b.toFixed(4)})`, '(6, 14)');
+  }]
+];
+
+const show = v => (typeof v === 'number' ? (Number.isInteger(v) ? String(v) : v.toPrecision(7)) : UI.esc(String(v)));
+
+UI.run('rerun', () => {
+  gilCache = null;
+  const t0 = performance.now();
+  const res = TESTS.map(([cat, name, basis, fn]) => {
+    try { return { cat, name, basis, ...fn() }; }
+    catch (e) { return { cat, name, basis, got: '錯誤：' + e.message, exp: '', tol: '', ok: false }; }
+  });
+  Epi.setSeed(NaN);
+  const passed = res.filter(r => r.ok).length;
+  UI.kpis('summary', [
+    ['通過', `<span class="${passed === res.length ? 'pass' : 'fail'}">${passed} / ${res.length}</span>`],
+    ['失敗', String(res.length - passed)],
+    ['執行時間', `${UI.fmt((performance.now() - t0) / 1000, 2)} 秒`]
+  ]);
+  document.getElementById('results').innerHTML = `<table class="data"><thead><tr><th>類別</th><th>測試</th><th>預期</th><th>實際</th><th>容許誤差</th><th>結果</th><th>依據</th></tr></thead><tbody>
+    ${res.map(r => `<tr><td>${r.cat}</td><td>${r.name}</td><td>${show(r.exp)}</td><td>${show(r.got)}</td><td>${r.tol}</td>
+      <td class="${r.ok ? 'pass' : 'fail'}">${r.ok ? '通過' : '失敗'}</td><td>${r.basis}</td></tr>`).join('')}
+    </tbody></table>`;
+})();
+</script>
+</body>
+</html>
