@@ -1,1 +1,155 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>即時再生數 Rt｜旅行流行病學工具箱</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body data-page="rt">
+<div id="site-header"></div>
+<section class="hero hero-sm"><div class="inner"><p class="eyebrow">傳染病｜推論</p><h1>即時再生數 Rt</h1><p>以 Cori 等（2013）的貝氏方法估計 Rt。輸入病例可以傳染給本地居民，但不是本地傳播的結果，所以只計入感染壓力，不計入新生病例。</p></div></section>
+<main id="main" class="container">
+  <div class="error" id="error" role="alert" hidden></div>
+  <div class="grid grid-2">
+    <div class="panel">
+      <h3>每日病例資料</h3>
+      <div class="field"><label for="rtData">CSV：天,本土病例,輸入病例</label><textarea id="rtData" rows="12"></textarea>
+        <div class="hint">天數需逐日連續；輸入病例欄可省略（視為 0）。</div></div>
+      <div class="btn-row" style="margin-bottom:16px"><button class="btn secondary" id="example">產生模擬資料</button></div>
+      <h3>序列間隔（Gamma）</h3>
+      <div class="row-2">
+        <div class="field"><label for="rtSiM">平均（天）</label><input id="rtSiM" type="number" step="0.1" value="4.7"></div>
+        <div class="field"><label for="rtSiS">標準差（天）</label><input id="rtSiS" type="number" step="0.1" value="2.9"></div>
+      </div>
+      <p class="hint">預設值取自 Nishiura 等（2020）的 COVID-19 估計，請依疾病調整。</p>
+      <h3>估計設定</h3>
+      <div class="field"><label for="rtTau">滑動時間窗（天）</label><input id="rtTau" type="number" value="7"></div>
+      <div class="row-2">
+        <div class="field"><label for="rtPm">Rt 先驗平均</label><input id="rtPm" type="number" step="0.1" value="5"></div>
+        <div class="field"><label for="rtPs">Rt 先驗標準差</label><input id="rtPs" type="number" step="0.1" value="5"></div>
+      </div>
+      <div class="field"><label for="rtConf">可信區間水準</label><input id="rtConf" type="number" step="0.01" value="0.95"></div>
+      <div class="btn-row"><button class="btn" id="calcRt">計算</button><button class="btn secondary" id="exportRt">匯出 CSV</button></div>
+    </div>
+    <div>
+      <div class="kpis" id="kpis"></div>
+      <div id="chartInc" class="chart short"></div>
+      <div id="chartRt" class="chart"></div>
+      <details><summary>逐日估計值</summary><div class="table-wrap" id="out"></div></details>
+      <details><summary>方法與假設</summary>
+        <div class="formula">感染壓力 Λₜ = Σₛ wₛ (本土ₜ₋ₛ + 輸入ₜ₋ₛ)，w 為離散化的序列間隔分佈
+時間窗 (t − τ + 1, …, t) 內，本土病例 ~ Poisson(Rₜ Λ)
+先驗 Rₜ ~ Gamma(a, b)，後驗 Rₜ ~ Gamma(a + Σ本土, 1 / (1/b + ΣΛ))
+後驗變異係數 CV = 1 / √(a + Σ本土)</div>
+        <p class="note">「未區分輸入病例」的對照線把所有病例都當成本土病例，在輸入病例多的時期會高估 Rt（Thompson 等 2019）。序列間隔以累積分佈差分離散化，和 EpiEstim 的離散化方式略有不同。表格中後驗變異係數大於 0.3 的估計值以灰色標示，代表時間窗內病例太少，估計不穩定。假設各日病例的通報延遲相同且通報完整。</p>
+      </details>
+    </div>
+  </div>
+</main>
+<div id="site-footer"></div>
+<script src="assets/js/epi.js"></script>
+<script src="assets/js/layout.js"></script>
+<script>
+let example = null, lastRt = null;
 
+function rpois(l) {
+  if (l <= 0) return 0;
+  if (l > 50) return Math.max(0, Math.round(Epi.rnorm(l, Math.sqrt(l))));
+  const L = Math.exp(-l);
+  let k = 0, p = 1;
+  do { k++; p *= Epi.runif(); } while (p > L);
+  return k - 1;
+}
+function makeExample() {
+  Epi.setSeed(7);
+  const T = 70, w = Epi.discretizeGamma(4.7, 2.9, 30), local = [], imp = [], trueR = [];
+  for (let t = 0; t < T; t++) {
+    const R = t < 35 ? 1.4 : 0.7;
+    let lam = 0;
+    for (let s = 1; s <= t && s < w.length; s++) lam += w[s] * (local[t - s] + imp[t - s]);
+    imp.push(rpois(t < 25 ? 4 : 0.5));
+    local.push(rpois(R * lam));
+    trueR.push(R);
+  }
+  const text = 'day,local,imported\n' + local.map((v, i) => `${i + 1},${v},${imp[i]}`).join('\n');
+  example = { text, trueR };
+  document.getElementById('rtData').value = text;
+}
+
+function parse(text) {
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+  const days = [], local = [], imported = [];
+  lines.forEach((line, i) => {
+    const f = line.split(/[,\t;，]/).map(s => s.trim());
+    if (i === 0 && !Number.isFinite(Number(f[0]))) return; // 標題列
+    const d = Number(f[0]), l = Number(f[1]), im = f.length > 2 && f[2] !== '' ? Number(f[2]) : 0;
+    if (f.length < 2 || !Number.isInteger(d)) throw new Error(`第 ${i + 1} 筆資料：天數欄需為整數`);
+    if (!Number.isInteger(l) || l < 0 || !Number.isInteger(im) || im < 0) throw new Error(`第 ${i + 1} 筆資料：病例數需為非負整數`);
+    days.push(d); local.push(l); imported.push(im);
+  });
+  for (let i = 1; i < days.length; i++) {
+    if (days[i] !== days[i - 1] + 1) throw new Error(`天數需逐日連續：第 ${days[i - 1]} 天之後接到第 ${days[i]} 天`);
+  }
+  return { days, local, imported };
+}
+
+const calc = UI.run('calcRt', () => {
+  const siM = UI.num('rtSiM', { min: 0.5, max: 60 }), siS = UI.num('rtSiS', { min: 0.1, max: 60 });
+  const tau = UI.num('rtTau', { min: 1, max: 60, int: true });
+  const pm = UI.num('rtPm', { min: 0.01 }), psd = UI.num('rtPs', { min: 0.01 });
+  const conf = UI.num('rtConf', { min: 0.5, max: 0.999 });
+  const text = document.getElementById('rtData').value;
+  const { days, local, imported } = parse(text);
+  if (days.length <= tau) throw new Error(`資料天數（${days.length}）需多於時間窗（${tau} 天）`);
+  const w = Epi.discretizeGamma(siM, siS, Math.ceil(siM + 6 * siS));
+  const [ps, pscale] = Epi.gammaFromMoments(pm, psd);
+  const est = Epi.coriRt(local, imported, w, tau, ps, pscale, conf);
+  const naive = Epi.coriRt(local.map((v, i) => v + imported[i]), local.map(() => 0), w, tau, ps, pscale, conf);
+  if (est.length === 0) throw new Error('沒有可估計的時間點，請確認資料中有病例');
+  const naiveByT = new Map(naive.map(r => [r.t, r]));
+  const rows = est.map(r => ({ day: days[r.t], ...r, cv: 1 / Math.sqrt(ps + r.cases), naive: naiveByT.get(r.t) }));
+  lastRt = rows;
+
+  const latest = rows[rows.length - 1];
+  UI.kpis('kpis', [
+    [`最新 Rt（第 ${latest.day} 天）`, `${UI.fmt(latest.mean, 2)}<br><small>${UI.fmt(latest.lo, 2)} – ${UI.fmt(latest.hi, 2)}</small>`],
+    ['未區分輸入病例的 Rt', latest.naive ? UI.fmt(latest.naive.mean, 2) : '—'],
+    ['本土病例總數', UI.fmt(local.reduce((a, b) => a + b, 0), 0)],
+    ['輸入病例總數', UI.fmt(imported.reduce((a, b) => a + b, 0), 0)]
+  ]);
+  UI.plot('chartInc', [
+    { type: 'bar', x: days, y: local, name: '本土病例', marker: { color: '#57068c' } },
+    { type: 'bar', x: days, y: imported, name: '輸入病例', marker: { color: '#e07b00' } }
+  ], { title: '每日病例數', barmode: 'stack', xaxis: { title: '天' }, yaxis: { title: '病例數' } });
+
+  const x = rows.map(r => r.day), traces = [
+    { x, y: rows.map(r => r.hi), mode: 'lines', line: { width: 0 }, showlegend: false, hoverinfo: 'skip' },
+    { x, y: rows.map(r => r.lo), mode: 'lines', line: { width: 0 }, fill: 'tonexty', fillcolor: 'rgba(87,6,140,.18)', name: `${UI.fmt(conf * 100, 1)}% 可信區間` },
+    { x, y: rows.map(r => r.mean), mode: 'lines', line: { color: '#57068c', width: 3 }, name: 'Rt（區分輸入病例）' },
+    { x, y: rows.map(r => r.naive?.mean ?? null), mode: 'lines', line: { color: '#e07b00', dash: 'dash' }, name: 'Rt（未區分輸入病例）' }
+  ];
+  if (example && text === example.text) {
+    traces.push({ x, y: rows.map(r => example.trueR[r.t]), mode: 'lines', line: { color: '#2a7f62', dash: 'dot', width: 2 }, name: '模擬資料的真實 Rt' });
+  }
+  UI.plot('chartRt', traces, {
+    title: `即時再生數（時間窗 ${tau} 天，以時間窗最後一天標示）`, xaxis: { title: '天' }, yaxis: { title: 'Rt', rangemode: 'tozero' },
+    shapes: [{ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: 1, y1: 1, line: { dash: 'dot', color: '#5f5f5f' } }]
+  });
+  document.getElementById('out').innerHTML = `<table class="data"><thead><tr><th>天</th><th>時間窗本土病例</th><th>Rt</th><th>可信區間</th><th>CV</th><th>未區分輸入</th></tr></thead><tbody>
+    ${rows.map(r => `<tr${r.cv > 0.3 ? ' style="color:#8a8a8a"' : ''}><td>${r.day}</td><td>${r.cases}</td><td>${UI.fmt(r.mean, 2)}</td><td>${UI.fmt(r.lo, 2)} – ${UI.fmt(r.hi, 2)}</td><td>${UI.fmt(r.cv, 2)}</td><td>${r.naive ? UI.fmt(r.naive.mean, 2) : '—'}</td></tr>`).join('')}
+    </tbody></table>`;
+});
+
+document.getElementById('example').addEventListener('click', () => { makeExample(); calc(); });
+document.getElementById('exportRt').addEventListener('click', () => {
+  if (!lastRt) return;
+  UI.downloadCSV('rt.csv', [['天', '時間窗本土病例', 'Rt', '下限', '上限', 'CV', '未區分輸入Rt'],
+    ...lastRt.map(r => [r.day, r.cases, r.mean, r.lo, r.hi, r.cv, r.naive ? r.naive.mean : ''])]);
+});
+makeExample();
+calc();
+</script>
+</body>
+</html>
