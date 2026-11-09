@@ -1,1 +1,109 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>方法與文獻｜旅行流行病學工具箱</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body data-page="about">
+<div id="site-header"></div>
+<section class="hero hero-sm"><div class="inner"><p class="eyebrow">說明文件</p><h1>方法與文獻</h1><p>各工具使用的模型、主要假設、已知限制與參考文獻。</p></div></section>
+<main id="main" class="container">
 
+  <h2>工具一覽</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>工具</th><th>方法</th><th>主要假設</th><th>文獻</th></tr></thead>
+      <tbody>
+        <tr><td><a href="calculators.html">基礎計算</a></td><td>Woolf 法、Poisson 精確區間、常態近似樣本數</td><td>大樣本近似（RR、OR、RD）；事件服從 Poisson 分佈</td><td>[1] [2] [3] [4]</td></tr>
+        <tr><td><a href="travel-risk.html">行程風險</a></td><td>固定發生率的指數模型</td><td>停留期間發生率固定；各風險項目獨立</td><td>[5]</td></tr>
+        <tr><td><a href="importation.html">輸出病例</a></td><td>旅客作為來源地人口的哨兵樣本</td><td>旅客是隨機樣本；海外偵測完整</td><td>[6]</td></tr>
+        <tr><td><a href="branching.html">爆發機率</a></td><td>負二項 Galton–Watson 分支過程</td><td>族群無限大；各病例獨立</td><td>[7]</td></tr>
+        <tr><td><a href="seir.html">SEIR 模擬</a></td><td>四階 Runge–Kutta；Gillespie 直接法</td><td>均勻混合；族群封閉；指數分佈的病程</td><td>[8]</td></tr>
+        <tr><td><a href="quarantine.html">檢疫策略</a></td><td>個體層級蒙地卡羅模擬</td><td>檢測敏感度在可檢出期間內固定；檢測結果獨立</td><td>[9] [10] [11] [12]</td></tr>
+        <tr><td><a href="airborne.html">空氣傳播</a></td><td>Wells–Riley；Rudnick–Milton</td><td>空氣完全混合；穩態濃度</td><td>[13] [14]</td></tr>
+        <tr><td><a href="rt.html">即時 Rt</a></td><td>Cori 法，Gamma–Poisson 共軛</td><td>序列間隔已知；通報完整且延遲一致</td><td>[15] [16] [17]</td></tr>
+        <tr><td><a href="economics.html">成本效益</a></td><td>決策樹、機率敏感度分析、CEAC、EVPI</td><td>單次旅程；參數彼此獨立</td><td>[18]</td></tr>
+        <tr><td><a href="comparison.html">跨風險比較</a></td><td>換算為每 10 萬名旅客的事件與死亡數</td><td>人口道路死亡率可近似旅客風險（需乘上暴露倍數）</td><td>[5] [19]</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 id="basic">基礎流行病學計算</h2>
+  <p>風險比與勝算比的信賴區間在對數尺度上以常態近似計算（Woolf 法）[1]。任一格為 0 時，所有格子加 0.5（Haldane 校正）[2]。發生率的信賴區間使用 Poisson 精確法，以伽瑪分佈分位數表示 [3]：</p>
+  <div class="formula">下限 = Γ⁻¹(α/2; x, 1) / PT      上限 = Γ⁻¹(1 − α/2; x + 1, 1) / PT</div>
+  <p>族群可歸因分率使用 Levin 公式。樣本數使用常態近似公式，未含連續性校正 [4]。</p>
+
+  <h2 id="travel-risk">多段行程風險</h2>
+  <p>每段行程以 p = 1 − exp(−r·t) 計算至少發生一次的機率，防護措施以效力 e 把發生率乘上 (1 − e)。整趟行程的風險假設各項目獨立，取 1 − Π(1 − pᵢ)。旅客的實際風險受季節、住宿型態、活動和個人行為影響，應優先使用與旅行型態相符的研究數據 [5]。</p>
+
+  <h2 id="importation">輸出病例</h2>
+  <p>Imai 等 [6] 在 COVID-19 疫情初期提出：若來源地有 X 名病例，每名病例在偵測時間窗 W 內搭機出境的機率為 p = 每日出境旅客數 × W / 服務人口，則海外確診病例數 x ≈ X·p，因此 X ≈ x / p。本工具以 Poisson 精確區間計算 x 的不確定性，原報告以二項分佈計算，區間數值會略有不同。</p>
+  <p class="note">限制：病例可能因症狀而不旅行、出境旅客的暴露程度與一般人口不同、海外偵測不完整，這些都會讓估計值偏低。</p>
+
+  <h2 id="branching">分支過程</h2>
+  <p>每位病例產生的次級病例數服從平均 R、離散度 k 的負二項分佈 [7]。滅絕機率 q 是 q = G(q) 的最小非負解，G 為機率生成函數。n 名獨立輸入病例全部滅絕的機率為 qⁿ。k 越小代表傳播越集中在少數人身上，單一病例的傳播鏈也越容易自行中斷。</p>
+
+  <h2 id="seir">SEIR 模型</h2>
+  <p>確定性模型以四階 Runge–Kutta 法（步長 0.05 天）求解。隨機模型使用 Gillespie 直接法 [8]，每次事件的等待時間服從指數分佈，介入開始時利用指數分佈的無記憶性重新抽樣。小族群中隨機性主導結果：相同參數下，部分模擬會大規模爆發，部分則很早消失。</p>
+
+  <h2 id="quarantine">檢疫與檢測策略</h2>
+  <p>模型架構參考 Quilty 等的入境篩檢與檢疫研究 [9] [10]。每位虛擬旅客依序抽樣感染時間、潛伏期（預設值來自 Lauer 等 [11]）與是否無症狀，再判斷在檢疫期間是否因症狀或檢測被發現。結果指標為「解除檢疫後殘留的傳染期占總傳染期的比例」。</p>
+  <p class="note">限制：PCR 敏感度實際上隨感染後天數變化 [12]，本工具在可檢出期間內使用固定值；未納入檢疫遵從度、檢測報告延遲與檢疫期間的傳播。</p>
+
+  <h2 id="airborne">室內空氣傳播</h2>
+  <p>Wells–Riley 模型 [13] 以「量子」表示感染劑量單位，感染機率 P = 1 − exp(−Iqpt/Q)。Rudnick–Milton 模型 [14] 以 CO₂ 濃度推算再吸入空氣比例，適合在無法量測通風量時使用。兩者都假設空氣完全混合，會低估近距離傳播的風險。量子產生率的文獻估計值範圍很大，應做敏感度分析。</p>
+
+  <h2 id="rt">即時再生數</h2>
+  <p>Cori 法 [15] 假設時間窗內的本土病例服從 Poisson(Rₜ·Λ)，Λ 為過去病例依序列間隔加權的感染壓力。輸入病例計入感染壓力，不計入本土病例，避免高估 Rt [16]。序列間隔預設值來自 Nishiura 等 [17]。</p>
+
+  <h2 id="economics">衛生經濟評估</h2>
+  <p>決策樹比較接種與不接種的期望成本與 QALY。機率敏感度分析中，機率參數使用 Beta 分佈，成本與 QALY 使用 Gamma 分佈，以動差法從平均值和標準差反推分佈參數 [18]。成本效益接受曲線顯示不同支付意願下接種具成本效益的機率；EVPI 估計消除所有參數不確定性的價值上限。</p>
+
+  <h2 id="comparison">跨風險比較</h2>
+  <p>不同健康事件的發生率單位不同（每旅次、每旅客月），工具依行程天數換算成每 10 萬名旅客的事件數與死亡數。旅客死亡的主要原因通常是心血管疾病與傷害，傳染病的占比較低 [5]。道路交通風險使用 WHO 的每 10 萬人口年死亡率 [19]，人口死亡率不等於旅客風險，所以加入可調整的暴露倍數。</p>
+
+  <h2 id="numerics">數值方法</h2>
+  <ul>
+    <li>亂數：Mulberry32 產生器，可設定種子以重現結果。</li>
+    <li>常態分佈：Box–Muller 抽樣；分位數使用 Acklam 有理近似。</li>
+    <li>伽瑪分佈：Marsaglia–Tsang 抽樣 [20]；對數伽瑪函數使用 Lanczos 近似；不完全伽瑪函數使用級數展開與連分數 [21]；分位數以二分法求解。</li>
+  </ul>
+
+  <h2 id="limits">尚未納入的模組</h2>
+  <p>以下方法需要外部資料或額外驗證，目前尚未實作：航空網絡超族群模型與有效距離 [22]、MCMC 參數擬合、Sobol 全域敏感度分析、多目的地個體微模擬、溫度驅動的病媒傳播 R₀、慢性病長期馬可夫模型。</p>
+
+  <h2 id="privacy">隱私與授權</h2>
+  <p>所有計算在使用者的瀏覽器中執行，網站不收集、不上傳、不儲存輸入資料。圖表套件 Plotly.js 從 CDN 載入。程式碼以 MIT 授權釋出。本站與紐約大學無任何關聯。</p>
+
+  <h2 id="refs">參考文獻</h2>
+  <ol class="note" style="font-size:.9rem">
+    <li>Woolf B. On estimating the relation between blood group and disease. <em>Ann Hum Genet</em>. 1955;19(4):251–253.</li>
+    <li>Haldane JBS. The estimation and significance of the logarithm of a ratio of frequencies. <em>Ann Hum Genet</em>. 1956;20(4):309–311.</li>
+    <li>Garwood F. Fiducial limits for the Poisson distribution. <em>Biometrika</em>. 1936;28(3/4):437–442.</li>
+    <li>Fleiss JL, Levin B, Paik MC. <em>Statistical Methods for Rates and Proportions</em>. 3rd ed. Wiley; 2003.</li>
+    <li>Centers for Disease Control and Prevention. <em>CDC Yellow Book: Health Information for International Travel</em>. <a href="https://www.cdc.gov/yellow-book/">https://www.cdc.gov/yellow-book/</a></li>
+    <li>Imai N, Dorigatti I, Cori A, Riley S, Ferguson NM. Report 1: Estimating the potential total number of novel Coronavirus cases in Wuhan City, China. Imperial College London; 17 January 2020.</li>
+    <li>Lloyd-Smith JO, Schreiber SJ, Kopp PE, Getz WM. Superspreading and the effect of individual variation on disease emergence. <em>Nature</em>. 2005;438:355–359.</li>
+    <li>Gillespie DT. Exact stochastic simulation of coupled chemical reactions. <em>J Phys Chem</em>. 1977;81(25):2340–2361.</li>
+    <li>Quilty BJ, Clifford S, CMMID nCoV working group, Flasche S, Eggo RM. Effectiveness of airport screening at detecting travellers infected with novel coronavirus (2019-nCoV). <em>Euro Surveill</em>. 2020;25(5):2000080.</li>
+    <li>Quilty BJ, Clifford S, Hellewell J, et al. Quarantine and testing strategies in contact tracing for SARS-CoV-2: a modelling study. <em>Lancet Public Health</em>. 2021;6(3):e175–e183.</li>
+    <li>Lauer SA, Grantz KH, Bi Q, et al. The incubation period of coronavirus disease 2019 (COVID-19) from publicly reported confirmed cases: estimation and application. <em>Ann Intern Med</em>. 2020;172(9):577–582.</li>
+    <li>Kucirka LM, Lauer SA, Laeyendecker O, Boon D, Lessler J. Variation in false-negative rate of reverse transcriptase polymerase chain reaction–based SARS-CoV-2 tests by time since exposure. <em>Ann Intern Med</em>. 2020;173(4):262–267.</li>
+    <li>Riley EC, Murphy G, Riley RL. Airborne spread of measles in a suburban elementary school. <em>Am J Epidemiol</em>. 1978;107(5):421–432.</li>
+    <li>Rudnick SN, Milton DK. Risk of indoor airborne infection transmission estimated from carbon dioxide concentration. <em>Indoor Air</em>. 2003;13(3):237–245.</li>
+    <li>Cori A, Ferguson NM, Fraser C, Cauchemez S. A new framework and software to estimate time-varying reproduction numbers during epidemics. <em>Am J Epidemiol</em>. 2013;178(9):1505–1512.</li>
+    <li>Thompson RN, Stockwin JE, van Gaalen RD, et al. Improved inference of time-varying reproduction numbers during infectious disease outbreaks. <em>Epidemics</em>. 2019;29:100356.</li>
+    <li>Nishiura H, Linton NM, Akhmetzhanov AR. Serial interval of novel coronavirus (COVID-19) infections. <em>Int J Infect Dis</em>. 2020;93:284–286.</li>
+    <li>Briggs A, Claxton K, Sculpher M. <em>Decision Modelling for Health Economic Evaluation</em>. Oxford University Press; 2006.</li>
+    <li>World Health Organization. Global Health Observatory: Estimated road traffic death rate (per 100 000 population). <a href="https://www.who.int/data/gho">https://www.who.int/data/gho</a></li>
+    <li>Marsaglia G, Tsang WW. A simple method for generating gamma variables. <em>ACM Trans Math Softw</em>. 2000;26(3):363–372.</li>
+    <li>Press WH, Teukolsky SA, Vetterling WT, Flannery BP. <em>Numerical Recipes: The Art of Scientific Computing</em>. 3rd ed. Cambridge University Press; 2007.</li>
+    <li>Brockmann D, Helbing D. The hidden geometry of complex, network-driven contagion phenomena. <em>Science</em>. 2013;342(6164):1337–1342.</li>
+  </ol>
+</main>
+<div id="site-footer"></div>
+<script src="assets/js/layout.js"></script>
+</body>
+</html>
