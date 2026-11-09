@@ -1,1 +1,90 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>輸入病例爆發機率｜旅行流行病學工具箱</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body data-page="branching">
+<div id="site-header"></div>
+<section class="hero hero-sm"><div class="inner"><p class="eyebrow">傳染病｜分支過程</p><h1>輸入病例爆發機率</h1><p>以負二項分支過程估算輸入病例在當地引發持續傳播的機率。離散度參數 k 越小，超級傳播越明顯，單一病例自行消失的機率也越高。</p></div></section>
+<main id="main" class="container">
+  <div class="error" id="error" role="alert" hidden></div>
+  <div class="grid grid-2">
+    <div class="panel">
+      <h3>參數（示例）</h3>
+      <div class="field"><label for="bR">基本再生數 R₀</label><input id="bR" type="number" step="0.1" value="2.5"></div>
+      <div class="field"><label for="bK">離散度參數 k</label><input id="bK" type="number" step="0.01" value="0.16">
+        <div class="hint">Lloyd-Smith 等（2005）估計 SARS 的 k 約為 0.16；k = 1 對應幾何分佈。</div></div>
+      <div class="field check"><label><input type="checkbox" id="bPois"> 使用 Poisson 分佈（k → ∞，沒有個體差異）</label></div>
+      <div class="field"><label for="bC">控制措施使 R 下降的比例（%）</label><input id="bC" type="number" value="0">
+        <div class="hint">例如接觸追蹤、隔離。有效再生數 R = R₀ × (1 − 下降比例)。</div></div>
+      <div class="field"><label for="bN">輸入病例數 n</label><input id="bN" type="number" min="1" value="5"></div>
+      <div class="btn-row"><button class="btn" id="calcB">計算</button></div>
+    </div>
+    <div>
+      <div class="kpis" id="kpis"></div>
+      <div id="chartR" class="chart"></div>
+      <div id="chartN" class="chart short"></div>
+      <details><summary>方法與假設</summary>
+        <div class="formula">每位病例的次級病例數 ~ 負二項分佈（平均 R，離散度 k）
+機率生成函數 G(s) = (1 + (R/k)(1 − s))^(−k)；Poisson 時 G(s) = exp(R(s − 1))
+單一病例的滅絕機率 q 為 q = G(q) 的最小非負解（固定點迭代）
+n 例輸入病例引發爆發的機率 = 1 − qⁿ
+引起 80% 傳播的病例比例：個人再生數 ν ~ Gamma(k, R/k)
+  x = F⁻¹_{k+1}(0.2)，比例 = 1 − F_k(x)（F 為相同尺度參數的 Gamma 累積分佈）</div>
+        <p class="note">「爆發」指傳播鏈不會自行滅絕（大規模流行），未考慮族群大小有限、易感者耗竭或傳播的季節性。各輸入病例視為彼此獨立。</p>
+      </details>
+    </div>
+  </div>
+</main>
+<div id="site-footer"></div>
+<script src="assets/js/epi.js"></script>
+<script src="assets/js/layout.js"></script>
+<script>
+document.getElementById('bPois').addEventListener('change', e => { document.getElementById('bK').disabled = e.target.checked; });
 
+const calc = UI.run('calcB', () => {
+  const R0 = UI.num('bR', { min: 0, max: 20 }), pois = UI.checked('bPois');
+  const k = pois ? Infinity : UI.num('bK', { min: 0.001, max: 1000 });
+  const c = UI.num('bC', { min: 0, max: 100 }) / 100, n = UI.num('bN', { min: 1, max: 10000, int: true });
+  const R = R0 * (1 - c), q = Epi.extinctionProb(R, k), P1 = 1 - q, Pn = 1 - Math.pow(q, n);
+  const need = p => (q >= 1 ? '不會發生' : UI.fmt(Math.max(1, Math.ceil(Math.log(1 - p) / Math.log(q))), 0) + ' 例');
+
+  let top = '—';
+  if (Number.isFinite(k) && k <= 100 && R > 0) {
+    const theta = R / k, x = Epi.qgamma(0.2, k + 1, theta);
+    top = UI.pct(1 - Epi.pgamma(x, k, theta), 1);
+  }
+  UI.kpis('kpis', [
+    ['有效再生數 R', UI.fmt(R, 2)],
+    ['單一輸入病例引發爆發的機率', UI.pct(P1, 1)],
+    [`${n} 例輸入病例引發爆發的機率`, UI.pct(Pn, 1)],
+    ['爆發機率達 50% 所需輸入病例數', need(0.5)],
+    ['爆發機率達 90% 所需輸入病例數', need(0.9)],
+    ['引起 80% 傳播的病例比例', top]
+  ]);
+
+  const Rs = Array.from({ length: 101 }, (_, i) => i * 0.05);
+  const ks = [0.1, 0.5, 1, 5, Infinity];
+  const traces = ks.map(kk => ({
+    x: Rs, y: Rs.map(r => (1 - Epi.extinctionProb(r, kk)) * 100), mode: 'lines',
+    name: Number.isFinite(kk) ? `k = ${kk}` : 'Poisson（k → ∞）'
+  }));
+  if (!ks.includes(k)) {
+    traces.push({ x: Rs, y: Rs.map(r => (1 - Epi.extinctionProb(r, k)) * 100), mode: 'lines', name: `k = ${k}（目前）`, line: { dash: 'dash', width: 3 } });
+  }
+  traces.push({ x: [R], y: [P1 * 100], mode: 'markers', name: '目前設定', marker: { size: 12, color: '#e07b00' } });
+  UI.plot('chartR', traces, { title: '單一輸入病例引發爆發的機率', xaxis: { title: '有效再生數 R' }, yaxis: { title: '機率（%）', range: [0, 100] } });
+
+  const ns = Array.from({ length: Math.max(20, n) }, (_, i) => i + 1);
+  UI.plot('chartN', [
+    { x: ns, y: ns.map(m => (1 - Math.pow(q, m)) * 100), mode: 'lines+markers', name: '爆發機率', marker: { size: 5 } }
+  ], { title: '爆發機率與輸入病例數', xaxis: { title: '輸入病例數' }, yaxis: { title: '機率（%）', range: [0, 100] }, showlegend: false });
+});
+calc();
+</script>
+</body>
+</html>
