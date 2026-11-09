@@ -1,1 +1,214 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>疫苗成本效益｜旅行流行病學工具箱</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body data-page="economics">
+<div id="site-header"></div>
+<section class="hero hero-sm"><div class="inner"><p class="eyebrow">衛生經濟</p><h1>旅遊疫苗成本效益</h1><p>比較「接種」與「不接種」的決策樹模型，附機率敏感度分析、成本效益平面、接受曲線、完全資訊期望價值與龍捲風圖。</p></div></section>
+<main id="main" class="container">
+  <div class="warn">所有參數都是示例數值，不代表任何特定疫苗或疾病。正式分析請依文獻設定，並在報告中說明成本年份、折現率與分析觀點（醫療體系或社會觀點）。</div>
+  <div class="error" id="error" role="alert" hidden></div>
 
+  <h2>參數</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>參數</th><th>分佈</th><th>平均值</th><th>標準差（0 表示固定）</th></tr></thead>
+      <tbody id="ptable"></tbody>
+    </table>
+  </div>
+  <div class="grid grid-halves">
+    <div class="panel">
+      <div class="row-2">
+        <div class="field"><label for="eCur">貨幣單位</label><input id="eCur" value="元"></div>
+        <div class="field"><label for="eWtp">支付意願閾值（每 QALY）</label><input id="eWtp" type="number" value="3000000"></div>
+      </div>
+      <div class="row-2">
+        <div class="field"><label for="eWtpMax">接受曲線的支付意願上限</label><input id="eWtpMax" type="number" value="10000000"></div>
+        <div class="field"><label for="ePop">每年目標旅客人數</label><input id="ePop" type="number" value="100000"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="row-2">
+        <div class="field"><label for="eN">機率敏感度分析抽樣次數</label><input id="eN" type="number" value="5000"></div>
+        <div class="field"><label for="eSeed">亂數種子</label><input id="eSeed" type="number" value="1"></div>
+      </div>
+      <div class="btn-row"><button class="btn" id="calcE">執行分析</button><button class="btn secondary" id="exportE">匯出抽樣結果 CSV</button></div>
+    </div>
+  </div>
+
+  <h2>基準分析</h2>
+  <div class="kpis" id="kpis"></div>
+  <div class="table-wrap" id="baseTable"></div>
+
+  <h2>不確定性分析</h2>
+  <div class="grid grid-halves">
+    <div id="plane" class="chart"></div>
+    <div id="ceac" class="chart"></div>
+    <div id="evpi" class="chart"></div>
+    <div id="tornado" class="chart"></div>
+  </div>
+
+  <details><summary>方法與假設</summary>
+    <div class="formula">每位旅客的期望值：
+不接種：成本 = p × C病例，QALY 損失 = p × (Q病例 + d × Q死亡)
+接種：  成本 = C疫苗 + p(1 − e) × C病例，QALY 損失 = p(1 − e) × (Q病例 + d × Q死亡)
+ΔC = 成本差，ΔE = 避免的 QALY 損失，ICER = ΔC / ΔE
+增量淨貨幣效益 INMB = λ × ΔE − ΔC（λ 為支付意願）
+接受曲線：P(INMB > 0)；EVPI = E[max(0, INMB)] − max(0, E[INMB])
+機率參數用 Beta 分佈，成本與 QALY 用 Gamma 分佈，以平均值和標準差反推分佈參數（動差法）
+龍捲風圖：每次只把一個參數換成其抽樣分佈的 2.5 與 97.5 百分位，其餘維持平均值</div>
+    <p class="note">模型為單次旅程的靜態決策樹，不含疫苗不良反應、群體免疫、多次旅行的累積保護與長期後遺症。需要長期狀態轉移時應改用馬可夫模型。參數之間假設獨立。</p>
+  </details>
+</main>
+<div id="site-footer"></div>
+<script src="assets/js/epi.js"></script>
+<script src="assets/js/layout.js"></script>
+<script>
+const PARAMS = [
+  { id: 'p', name: '旅程中感染機率（未接種）', dist: 'beta', mean: 0.01, sd: 0.005 },
+  { id: 'e', name: '疫苗效力', dist: 'beta', mean: 0.9, sd: 0.05 },
+  { id: 'cv', name: '每人接種成本（含門診）', dist: 'gamma', mean: 3000, sd: 500 },
+  { id: 'cc', name: '每位病例的治療成本', dist: 'gamma', mean: 50000, sd: 20000 },
+  { id: 'qc', name: '每位病例的 QALY 損失（急性期）', dist: 'gamma', mean: 0.05, sd: 0.02 },
+  { id: 'd', name: '病例死亡率', dist: 'beta', mean: 0.002, sd: 0.001 },
+  { id: 'qd', name: '每例死亡損失的 QALY（已折現）', dist: 'gamma', mean: 15, sd: 5 }
+];
+document.getElementById('ptable').innerHTML = PARAMS.map(p => `<tr><td>${p.name}</td><td>${p.dist === 'beta' ? 'Beta' : 'Gamma'}</td>
+  <td><input type="number" step="any" id="m_${p.id}" value="${p.mean}" aria-label="${p.name}：平均值"></td>
+  <td><input type="number" step="any" id="s_${p.id}" value="${p.sd}" aria-label="${p.name}：標準差"></td></tr>`).join('');
+
+function readParams() {
+  return PARAMS.map(p => {
+    const mean = UI.num(`m_${p.id}`, p.dist === 'beta' ? { min: 0, max: 1 } : { min: 0 });
+    const sd = UI.num(`s_${p.id}`, { min: 0 });
+    if (sd > 0) {
+      try { p.dist === 'beta' ? Epi.betaFromMoments(mean, sd) : Epi.gammaFromMoments(mean, sd); }
+      catch (e) { throw new Error(`「${p.name}」：${e.message}`); }
+    }
+    return { ...p, mean, sd };
+  });
+}
+function model(v) {
+  const loss = v.qc + v.d * v.qd;
+  const cNo = v.p * v.cc, cVac = v.cv + v.p * (1 - v.e) * v.cc;
+  const qNo = v.p * loss, qVac = v.p * (1 - v.e) * loss;
+  return { cNo, cVac, qNo, qVac, dC: cVac - cNo, dE: qNo - qVac };
+}
+let lastE = null;
+
+const calc = UI.run('calcE', () => {
+  const ps = readParams(), cur = UI.esc(UI.text('eCur') || '元');
+  const wtp = UI.num('eWtp', { min: 0 }), wtpMax = UI.num('eWtpMax', { min: 1 }), pop = UI.num('ePop', { min: 0 });
+  const n = UI.num('eN', { min: 100, max: 100000, int: true });
+  const seed = UI.text('eSeed');
+  if (seed !== '' && !Number.isInteger(Number(seed))) throw new Error('「亂數種子」需要是整數或留白');
+  Epi.setSeed(seed === '' ? NaN : Number(seed));
+
+  // 基準分析
+  const base = Object.fromEntries(ps.map(p => [p.id, p.mean]));
+  const b = model(base), baseInb = wtp * b.dE - b.dC;
+  let icerText;
+  if (b.dE > 0 && b.dC <= 0) icerText = '接種為優勢策略<br><small>成本較低且效果較好</small>';
+  else if (b.dE <= 0 && b.dC >= 0) icerText = '接種被凌駕<br><small>成本較高且效果未較好</small>';
+  else if (b.dE < 0 && b.dC < 0) icerText = `${UI.fmt(b.dC / b.dE, 0)} ${cur}/QALY<br><small>成本較低但效果較差</small>`;
+  else icerText = `${UI.fmt(b.dC / b.dE, 0)} ${cur}/QALY`;
+
+  // 機率敏感度分析
+  const draws = ps.map(() => new Array(n)), dC = new Array(n), dE = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const v = {};
+    ps.forEach((p, j) => { const x = Epi.sampleParam(p.dist, p.mean, p.sd); draws[j][i] = x; v[p.id] = x; });
+    const r = model(v);
+    dC[i] = r.dC; dE[i] = r.dE;
+  }
+  const stats = w => {
+    let pos = 0, sumPos = 0, sum = 0;
+    for (let i = 0; i < n; i++) {
+      const x = w * dE[i] - dC[i];
+      sum += x;
+      if (x > 0) { pos++; sumPos += x; }
+    }
+    return { pce: pos / n, evpi: sumPos / n - Math.max(0, sum / n) };
+  };
+  const s0 = stats(wtp);
+  lastE = { ps, draws, dC, dE, n };
+
+  UI.kpis('kpis', [
+    ['基準 ICER', icerText],
+    [`每位旅客的 INMB（λ = ${UI.fmt(wtp, 0)}）`, `${UI.fmt(baseInb, 0)} ${cur}`],
+    ['接種具成本效益的機率', UI.pct(s0.pce, 1)],
+    ['每位旅客的 EVPI', `${UI.fmt(s0.evpi, 1)} ${cur}`],
+    ['目標族群每年的 EVPI', `${UI.fmt(s0.evpi * pop, 0)} ${cur}`],
+    ['預防一例需接種人數', base.p * base.e > 0 ? UI.fmt(Math.ceil(1 / (base.p * base.e)), 0) : '—']
+  ]);
+  document.getElementById('baseTable').innerHTML = `<table class="data"><thead><tr><th>策略</th><th>每位旅客成本（${cur}）</th><th>每位旅客 QALY 損失</th><th>每 10 萬旅客病例數</th><th>每 10 萬旅客死亡數</th></tr></thead><tbody>
+    <tr><td>不接種</td><td>${UI.fmt(b.cNo, 1)}</td><td>${UI.fmt(b.qNo, 6)}</td><td>${UI.fmt(base.p * 1e5, 1)}</td><td>${UI.fmt(base.p * base.d * 1e5, 2)}</td></tr>
+    <tr><td>接種</td><td>${UI.fmt(b.cVac, 1)}</td><td>${UI.fmt(b.qVac, 6)}</td><td>${UI.fmt(base.p * (1 - base.e) * 1e5, 1)}</td><td>${UI.fmt(base.p * (1 - base.e) * base.d * 1e5, 2)}</td></tr>
+    <tr><td><strong>差異（接種 − 不接種）</strong></td><td>${UI.fmt(b.dC, 1)}</td><td>${UI.fmt(-b.dE, 6)}</td><td>${UI.fmt(-base.p * base.e * 1e5, 1)}</td><td>${UI.fmt(-base.p * base.e * base.d * 1e5, 2)}</td></tr>
+    </tbody></table>`;
+
+  // 成本效益平面（每 1,000 名旅客，最多顯示 3,000 點）
+  const show = Math.min(n, 3000);
+  const xs = dE.slice(0, show).map(v => v * 1000), ys = dC.slice(0, show).map(v => v * 1000);
+  const xmin = Math.min(0, ...xs);
+  let xmax = Math.max(0, ...xs);
+  if (xmax === xmin) xmax = xmin + 1e-6;
+  UI.plot('plane', [
+    { type: 'scattergl', mode: 'markers', x: xs, y: ys, name: '抽樣結果', marker: { size: 4, color: 'rgba(87,6,140,.3)' } },
+    { x: [b.dE * 1000], y: [b.dC * 1000], mode: 'markers', name: '基準值', marker: { size: 12, symbol: 'diamond', color: '#e07b00' } },
+    { x: [xmin, xmax], y: [wtp * xmin, wtp * xmax], mode: 'lines', name: '支付意願閾值', line: { dash: 'dash', color: '#5f5f5f' } }
+  ], { title: '成本效益平面（每 1,000 名旅客）', xaxis: { title: '避免的 QALY 損失' }, yaxis: { title: `增量成本（${cur}）` } });
+
+  // 接受曲線與 EVPI
+  const ws = Array.from({ length: 61 }, (_, i) => wtpMax * i / 60);
+  const curve = ws.map(stats);
+  const wtpLine = { type: 'line', x0: wtp, x1: wtp, yref: 'paper', y0: 0, y1: 1, line: { dash: 'dot', color: '#5f5f5f' } };
+  UI.plot('ceac', [
+    { x: ws, y: curve.map(c => c.pce), mode: 'lines', name: '接種', line: { width: 3 } },
+    { x: ws, y: curve.map(c => 1 - c.pce), mode: 'lines', name: '不接種', line: { dash: 'dash' } }
+  ], { title: '成本效益接受曲線', xaxis: { title: `支付意願（${cur}/QALY）` }, yaxis: { title: '具成本效益的機率', range: [0, 1] }, shapes: [wtpLine] });
+  UI.plot('evpi', [
+    { x: ws, y: curve.map(c => c.evpi), mode: 'lines', name: 'EVPI', line: { width: 3 } }
+  ], { title: '每位旅客的完全資訊期望價值', xaxis: { title: `支付意願（${cur}/QALY）` }, yaxis: { title: `EVPI（${cur}）`, rangemode: 'tozero' }, shapes: [wtpLine], showlegend: false });
+
+  // 龍捲風圖
+  const tor = ps.map((p, j) => {
+    if (p.sd <= 0) return null;
+    const lo = Epi.quantile(draws[j], 0.025), hi = Epi.quantile(draws[j], 0.975);
+    const at = x => { const r = model({ ...base, [p.id]: x }); return wtp * r.dE - r.dC; };
+    const iLo = at(lo), iHi = at(hi);
+    return { name: p.name, lo, hi, iLo, iHi, range: Math.abs(iHi - iLo) };
+  }).filter(Boolean).sort((a, b) => a.range - b.range);
+  if (tor.length === 0) {
+    Plotly.purge('tornado');
+    document.getElementById('tornado').innerHTML = '<p class="note">所有參數的標準差都是 0，沒有可呈現的敏感度分析。</p>';
+  } else {
+    const yn = tor.map(t => t.name);
+    UI.plot('tornado', [
+      { type: 'bar', orientation: 'h', y: yn, x: tor.map(t => t.iLo - baseInb), base: baseInb, name: '參數取 2.5 百分位',
+        marker: { color: '#57068c' }, text: tor.map(t => `參數值 ${UI.fmt(t.lo, 4)}`), hovertemplate: '%{text}<br>INMB %{x:,.0f}<extra></extra>' },
+      { type: 'bar', orientation: 'h', y: yn, x: tor.map(t => t.iHi - baseInb), base: baseInb, name: '參數取 97.5 百分位',
+        marker: { color: '#e07b00' }, text: tor.map(t => `參數值 ${UI.fmt(t.hi, 4)}`), hovertemplate: '%{text}<br>INMB %{x:,.0f}<extra></extra>' }
+    ], {
+      title: '單因子敏感度：每位旅客的 INMB', barmode: 'overlay', xaxis: { title: `INMB（${cur}）` },
+      margin: { l: 220, r: 24, t: 48, b: 64 }, textposition: 'none',
+      shapes: [{ type: 'line', x0: baseInb, x1: baseInb, yref: 'paper', y0: 0, y1: 1, line: { color: '#1d1d1d' } }]
+    });
+  }
+});
+calc();
+
+document.getElementById('exportE').addEventListener('click', () => {
+  if (!lastE) return;
+  const { ps, draws, dC, dE, n } = lastE, rows = [[...ps.map(p => p.name), '增量成本ΔC', '避免的QALY損失ΔE']];
+  for (let i = 0; i < n; i++) rows.push([...ps.map((_, j) => draws[j][i]), dC[i], dE[i]]);
+  UI.downloadCSV('economics-psa.csv', rows);
+});
+</script>
+</body>
+</html>
