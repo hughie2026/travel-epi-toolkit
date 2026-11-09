@@ -1,1 +1,42 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>旅行流行病學工具箱</title>
+<meta name="description" content="旅行相關健康事件的風險估算、傳播模擬與決策分析工具，所有計算在瀏覽器中執行。">
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body data-page="index">
+<div id="site-header"></div>
+<section class="hero">
+  <div class="inner">
+    <p class="eyebrow">Travel Epidemiology Toolkit</p>
+    <h1>旅行流行病學工具箱</h1>
+    <p>給研究者、旅遊醫學醫師與公共衛生人員使用的開源建模工具，涵蓋旅客個人風險、輸入病例與爆發機率、封閉族群傳播、檢疫策略、空氣傳播、即時再生數與衛生經濟評估。所有計算都在你的瀏覽器中完成。</p>
+  </div>
+</section>
+<main id="main" class="container">
+  <h2>工具</h2>
+  <div class="grid cards">
+    <article class="card"><p class="tag">通用</p><h3>基礎流行病學計算</h3><p>2×2 表的風險比、勝算比、風險差與信賴區間；發生率的 Poisson 精確信賴區間；調查與比較研究的樣本數。</p><a class="more" href="calculators.html">開啟工具 →</a></article>
+    <article class="card"><p class="tag">傳染病｜個人風險</p><h3>多段行程風險</h3><p>依各段行程的停留天數與發生率估算感染機率，計算防護措施的絕對風險降低與需治療人數（NNT）。</p><a class="more" href="travel-risk.html">開啟工具 →</a></article>
+    <article class="card"><p class="tag">傳染病｜監測</p><h3>輸出病例反推疫情規模</h3><p>以 Imai 等（2020）的方法，用海外確診的旅客病例估算來源地的實際病例數，並估算預期輸出病例。</p><a class="more" href="importation.html">開啟工具 →</a></article>
+    <article class="card"><p class="tag">傳染病｜分支過程</p><h3>輸入病例爆發機率</h3><p>負二項分支過程，以離散度參數 k 描述超級傳播，計算 n 例輸入病例引發持續傳播的機率。</p><a class="more" href="branching.html">開啟工具 →</a></article>
+    <article class="card"><p class="tag">傳染病｜動態模型</p><h3>封閉族群 SEIR 模擬</h3><p>郵輪、旅行團、營隊等情境。確定性微分方程與 Gillespie 隨機模擬並列比較，可設定介入時間與效果。</p><a class="more" href="seir.html">開啟工具 →</a></article>
+    <article class="card"><p class="tag">傳染病｜邊境措施</p><h3>檢疫與檢測策略</h3><p>蒙地卡羅模擬不同檢疫天數與檢測時點組合下，旅客釋放後仍殘留的傳染期比例。</p><a class="more" href="quarantine.html">開啟工具 →</a></article>
+    <article class="card"><p class="tag">傳染病｜環境</p><h3>室內空氣傳播</h3><p>Wells–Riley 與 Rudnick–Milton（CO₂）模型，評估機艙、巴士、船艙中通風與口罩對感染機率的影響。</p><a class="more" href="airborne.html">開啟工具 →</a></article>
+    <article class="card"><p class="tag">傳染病｜推論</p><h3>即時再生數 Rt</h3><p>Cori 等（2013）的貝氏方法，區分本土與輸入病例，避免把輸入病例算成本地傳播。</p><a class="more" href="rt.html">開啟工具 →</a></article>
+    <article class="card"><p class="tag">衛生經濟</p><h3>疫苗成本效益</h3><p>決策樹、ICER、機率敏感度分析、成本效益平面、成本效益接受曲線（CEAC）、EVPI 與龍捲風圖。</p><a class="more" href="economics.html">開啟工具 →</a></article>
+    <article class="card"><p class="tag">傷害與慢性病</p><h3>跨風險比較</h3><p>把傳染病、傷害與慢性病事件換算成「每 10 萬名旅客」的同一尺度，並比較目的地與原居地的道路交通風險。</p><a class="more" href="comparison.html">開啟工具 →</a></article>
+  </div>
 
+  <h2>使用前請注意</h2>
+  <div class="warn">
+    頁面預設參數中，標示「示例」的數值只用來展示介面，並非實際流行病學數據。正式分析請換成文獻或監測資料，並在報告中註明來源。各模型的假設與限制請見<a href="about.html">方法與文獻</a>，數值正確性的檢查請見<a href="tests.html">模型驗證測試</a>。
+  </div>
+</main>
+<div id="site-footer"></div>
+<script src="assets/js/layout.js"></script>
+</body>
+</html>
