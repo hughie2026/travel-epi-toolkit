@@ -1,1 +1,183 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>跨風險比較｜旅行流行病學工具箱</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body data-page="comparison">
+<div id="site-header"></div>
+<section class="hero hero-sm"><div class="inner"><p class="eyebrow">傷害與慢性病</p><h1>跨風險比較</h1><p>把傳染病、傷害與慢性病事件換算成每 10 萬名旅客的事件數與死亡數，找出最需要優先處理的風險。</p></div></section>
+<main id="main" class="container">
+  <div class="tabs" role="tablist">
+    <button class="active" data-tab="tab-all" role="tab" aria-selected="true">跨風險比較</button>
+    <button data-tab="tab-road" role="tab" aria-selected="false">道路交通風險</button>
+  </div>
+  <div class="error" id="error" role="alert" hidden></div>
 
+  <section class="tab-panel active" id="tab-all">
+    <div class="warn">表格中的所有發生率與致死率都是示例數值，只用來展示計算方式。請依目的地、旅客族群與研究文獻替換。</div>
+    <div class="field" style="max-width:280px"><label for="cDays">行程天數</label><input id="cDays" type="number" value="14"></div>
+    <div class="table-wrap">
+      <table class="data">
+        <thead><tr><th>健康事件</th><th>類別</th><th>發生率</th><th>單位</th><th>致死率（%）</th><th></th></tr></thead>
+        <tbody id="events"></tbody>
+      </table>
+    </div>
+    <div class="btn-row">
+      <button class="btn secondary" id="addC">新增一列</button>
+      <button class="btn" id="calcC">計算</button>
+      <button class="btn secondary" id="exportC">匯出 CSV</button>
+    </div>
+    <h2>結果（每 10 萬名旅客）</h2>
+    <div class="kpis" id="kpiC"></div>
+    <div class="grid grid-halves">
+      <div id="chartC" class="chart"></div>
+      <div id="chartCat" class="chart"></div>
+    </div>
+    <div class="table-wrap" id="outC"></div>
+    <details><summary>方法與假設</summary>
+      <div class="formula">單位為「每 10 萬旅次」：事件數 = 發生率（與行程天數無關，例如單次長途飛行）
+單位為「每 10 萬旅客月」：事件數 = 100,000 × [1 − exp(−發生率 / 100,000 × 天數 / 30)]
+死亡數 = 事件數 × 致死率</div>
+      <p class="note">「總事件數」是各項目相加，同一位旅客可能發生多項事件，所以不等於受影響的人數。各項目視為獨立。</p>
+    </details>
+  </section>
+
+  <section class="tab-panel" id="tab-road">
+    <div class="grid grid-2">
+      <div class="panel">
+        <h3>道路交通死亡率（示例）</h3>
+        <div class="field"><label for="rDest">目的地：每 10 萬人口年死亡數</label><input id="rDest" type="number" step="0.1" value="25">
+          <div class="hint">可查 WHO Global Health Observatory 的 Estimated road traffic death rate。</div></div>
+        <div class="field"><label for="rHome">原居地：每 10 萬人口年死亡數</label><input id="rHome" type="number" step="0.1" value="12"></div>
+        <div class="field"><label for="rDays">停留天數</label><input id="rDays" type="number" value="14"></div>
+        <div class="field"><label for="rMult">旅客暴露倍數</label><input id="rMult" type="number" step="0.1" value="1">
+          <div class="hint">旅客騎機車、夜間行車或不熟悉路況時，暴露可能高於當地居民。沒有資料時保持 1，並以不同數值做敏感度分析。</div></div>
+        <div class="btn-row"><button class="btn" id="calcR">計算</button></div>
+      </div>
+      <div>
+        <div class="kpis" id="kpiR"></div>
+        <div id="chartR" class="chart"></div>
+        <details><summary>方法與假設</summary>
+          <div class="formula">目的地死亡風險 = 1 − exp(−目的地死亡率 / 100,000 × 暴露倍數 × 天數 / 365)
+原居地同期風險 = 1 − exp(−原居地死亡率 / 100,000 × 天數 / 365)
+超額死亡數（每 10 萬名旅客）= 100,000 × (目的地風險 − 原居地同期風險)</div>
+          <p class="note">人口死亡率包含所有年齡與交通方式，與旅客的實際暴露不同。原居地的比較假設旅客若沒有出行，會承受原居地的平均風險。</p>
+        </details>
+      </div>
+    </div>
+  </section>
+</main>
+<div id="site-footer"></div>
+<script src="assets/js/epi.js"></script>
+<script src="assets/js/layout.js"></script>
+<script>
+UI.initTabs();
+const CATS = ['傳染病', '傷害', '慢性病'];
+const CAT_COLOR = { '傳染病': '#57068c', '傷害': '#e07b00', '慢性病': '#2a7f62' };
+const UNITS = { trip: '每 10 萬旅次', month: '每 10 萬旅客月' };
+const rows = [
+  { name: '旅行者腹瀉', cat: '傳染病', rate: 30000, unit: 'month', cfr: 0.001 },
+  { name: '登革熱', cat: '傳染病', rate: 300, unit: 'month', cfr: 0.1 },
+  { name: '瘧疾（未預防）', cat: '傳染病', rate: 200, unit: 'month', cfr: 1 },
+  { name: '道路交通傷害（需就醫）', cat: '傷害', rate: 300, unit: 'month', cfr: 3 },
+  { name: '溺水', cat: '傷害', rate: 3, unit: 'trip', cfr: 30 },
+  { name: '急性心血管事件', cat: '慢性病', rate: 60, unit: 'month', cfr: 10 },
+  { name: '長途飛行靜脈血栓', cat: '慢性病', rate: 30, unit: 'trip', cfr: 1 }
+];
+const tbody = document.getElementById('events');
+
+function render() {
+  tbody.innerHTML = rows.map((r, i) => `<tr>
+    <td><input data-i="${i}" data-k="name" value="${UI.esc(r.name)}" aria-label="第 ${i + 1} 列：健康事件"></td>
+    <td><select data-i="${i}" data-k="cat" aria-label="第 ${i + 1} 列：類別">${CATS.map(c => `<option${c === r.cat ? ' selected' : ''}>${c}</option>`).join('')}</select></td>
+    <td><input type="number" step="any" data-i="${i}" data-k="rate" value="${UI.esc(r.rate)}" aria-label="第 ${i + 1} 列：發生率"></td>
+    <td><select data-i="${i}" data-k="unit" aria-label="第 ${i + 1} 列：單位">${Object.entries(UNITS).map(([k, v]) => `<option value="${k}"${k === r.unit ? ' selected' : ''}>${v}</option>`).join('')}</select></td>
+    <td><input type="number" step="any" data-i="${i}" data-k="cfr" value="${UI.esc(r.cfr)}" aria-label="第 ${i + 1} 列：致死率"></td>
+    <td><button class="btn-link" data-del="${i}">刪除</button></td></tr>`).join('');
+}
+const update = e => { const { i, k } = e.target.dataset; if (k) rows[Number(i)][k] = e.target.value; };
+tbody.addEventListener('input', update);
+tbody.addEventListener('change', update);
+tbody.addEventListener('click', e => {
+  const i = e.target.dataset.del;
+  if (i !== undefined) { rows.splice(Number(i), 1); render(); }
+});
+document.getElementById('addC').addEventListener('click', () => {
+  rows.push({ name: `事件 ${rows.length + 1}`, cat: '傳染病', rate: 10, unit: 'month', cfr: 0 });
+  render();
+});
+render();
+
+function compute() {
+  const D = UI.num('cDays', { min: 1, max: 3650 });
+  if (rows.length === 0) throw new Error('請至少輸入一列');
+  return rows.map((r, i) => {
+    const rate = Number(r.rate), cfr = Number(r.cfr);
+    if (String(r.rate).trim() === '' || !Number.isFinite(rate) || rate < 0) throw new Error(`第 ${i + 1} 列「發生率」需為非負數字`);
+    if (r.unit === 'trip' && rate > 1e5) throw new Error(`第 ${i + 1} 列：單位為每 10 萬旅次時，發生率不能超過 100,000`);
+    if (String(r.cfr).trim() === '' || !Number.isFinite(cfr) || cfr < 0 || cfr > 100) throw new Error(`第 ${i + 1} 列「致死率」應介於 0 與 100 之間`);
+    const events = r.unit === 'trip' ? rate : 1e5 * (1 - Math.exp(-rate / 1e5 * D / 30));
+    return { name: String(r.name).trim() || `事件 ${i + 1}`, cat: r.cat, rate, unit: r.unit, cfr, events, deaths: events * cfr / 100 };
+  });
+}
+let lastC = null;
+
+const calcC = UI.run('calcC', () => {
+  const res = compute();
+  lastC = res;
+  const totE = res.reduce((s, r) => s + r.events, 0), totD = res.reduce((s, r) => s + r.deaths, 0);
+  const top = res.reduce((a, b) => (b.deaths > a.deaths ? b : a));
+  const byCat = CATS.map(c => res.filter(r => r.cat === c).reduce((s, r) => s + r.deaths, 0));
+  UI.kpis('kpiC', [
+    ['總事件數', UI.fmt(totE, 0)],
+    ['總死亡數', UI.fmt(totD, 2)],
+    ['死亡數最多的事件', totD > 0 ? UI.esc(top.name) : '—'],
+    ['傷害與慢性病占死亡的比例', totD > 0 ? UI.pct((byCat[1] + byCat[2]) / totD, 1) : '—']
+  ]);
+  const sorted = [...res].sort((a, b) => a.deaths - b.deaths);
+  const names = sorted.map(r => r.name);
+  UI.plot('chartC', [
+    { type: 'bar', orientation: 'h', y: names, x: sorted.map(r => r.events), name: '事件數', marker: { color: '#b17ad6' } },
+    { type: 'bar', orientation: 'h', y: names, x: sorted.map(r => r.deaths), name: '死亡數', marker: { color: sorted.map(r => CAT_COLOR[r.cat]) } }
+  ], { title: '每 10 萬名旅客的事件與死亡數（對數尺度）', barmode: 'group', xaxis: { type: 'log', title: '人數' }, margin: { l: 170, r: 24, t: 48, b: 64 } });
+  UI.plot('chartCat', [
+    { type: 'bar', x: CATS, y: byCat, marker: { color: CATS.map(c => CAT_COLOR[c]) } }
+  ], { title: '各類別的死亡數', yaxis: { title: '每 10 萬名旅客死亡數' }, showlegend: false });
+  document.getElementById('outC').innerHTML = `<table class="data"><thead><tr><th>健康事件</th><th>類別</th><th>輸入發生率</th><th>事件數</th><th>死亡數</th><th>占總死亡</th></tr></thead><tbody>
+    ${[...res].sort((a, b) => b.deaths - a.deaths).map(r => `<tr><td>${UI.esc(r.name)}</td><td>${r.cat}</td><td>${UI.fmt(r.rate, 3)}（${UNITS[r.unit]}）</td>
+      <td>${UI.fmt(r.events, 2)}</td><td>${UI.fmt(r.deaths, 3)}</td><td>${totD > 0 ? UI.pct(r.deaths / totD, 1) : '—'}</td></tr>`).join('')}
+    </tbody></table>`;
+});
+calcC();
+
+document.getElementById('exportC').addEventListener('click', () => {
+  if (!lastC) return;
+  UI.downloadCSV('risk-comparison.csv', [['健康事件', '類別', '發生率', '單位', '致死率(%)', '每10萬旅客事件數', '每10萬旅客死亡數'],
+    ...lastC.map(r => [r.name, r.cat, r.rate, UNITS[r.unit], r.cfr, r.events, r.deaths])]);
+});
+
+UI.run('calcR', () => {
+  const dest = UI.num('rDest', { min: 0, max: 1000 }), home = UI.num('rHome', { min: 0, max: 1000 });
+  const days = UI.num('rDays', { min: 1, max: 3650 }), mult = UI.num('rMult', { min: 0, max: 20 });
+  const risk = (rate, d, m = 1) => 1 - Math.exp(-rate / 1e5 * m * d / 365);
+  const pD = risk(dest, days, mult), pH = risk(home, days);
+  UI.kpis('kpiR', [
+    ['停留期間每 10 萬名旅客死亡數', UI.fmt(pD * 1e5, 2)],
+    ['同期留在原居地的死亡數', UI.fmt(pH * 1e5, 2)],
+    ['超額死亡數（每 10 萬名旅客）', UI.fmt((pD - pH) * 1e5, 2)],
+    ['相對風險（目的地 ÷ 原居地）', pH > 0 ? UI.fmt(pD / pH, 2) : '—']
+  ]);
+  const ds = Array.from({ length: 61 }, (_, i) => Math.max(1, i * Math.max(days, 30) * 2 / 60));
+  UI.plot('chartR', [
+    { x: ds, y: ds.map(d => risk(dest, d, mult) * 1e5), mode: 'lines', name: '目的地', line: { width: 3 } },
+    { x: ds, y: ds.map(d => risk(home, d) * 1e5), mode: 'lines', name: '原居地', line: { dash: 'dash' } },
+    { x: [days], y: [pD * 1e5], mode: 'markers', name: '目前設定', marker: { size: 11, color: '#e07b00' } }
+  ], { title: '道路交通死亡數與停留天數', xaxis: { title: '天數' }, yaxis: { title: '每 10 萬名旅客死亡數' } });
+})();
+</script>
+</body>
+</html>
