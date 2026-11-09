@@ -36,7 +36,7 @@
           <div><strong>使用限制</strong><p>本工具僅供教育與研究用途。結果取決於輸入參數，不能取代醫師的個別評估或衛生主管機關的正式建議。</p></div>
           <div><strong>連結</strong><p><a href="about.html">方法與文獻</a><br><a href="tests.html">模型驗證測試</a></p></div>
         </div>
-        <p class="fine">程式碼以 MIT 授權釋出。版面配色參考紐約大學網站風格，本站與紐約大學無任何關聯。</p>
+        <p class="fine">程式碼以 MIT 授權釋出。頁面版權歸澳門旅遊大學陶曉宇副教授所有。</p>
       </div></footer>`;
   }
 
