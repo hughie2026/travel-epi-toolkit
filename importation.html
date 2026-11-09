@@ -1,1 +1,146 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>輸出病例｜旅行流行病學工具箱</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body data-page="importation">
+<div id="site-header"></div>
+<section class="hero hero-sm"><div class="inner"><p class="eyebrow">傳染病｜監測</p><h1>輸出病例與來源地疫情規模</h1><p>用海外確診的旅客病例反推來源地的病例數，或從來源地疫情估算各目的地的預期輸入病例。</p></div></section>
+<main id="main" class="container">
+  <div class="tabs" role="tablist">
+    <button class="active" data-tab="tab-back" role="tab" aria-selected="true">反推來源地規模</button>
+    <button data-tab="tab-fwd" role="tab" aria-selected="false">預期輸出病例</button>
+  </div>
+  <div class="error" id="error" role="alert" hidden></div>
 
+  <section class="tab-panel active" id="tab-back">
+    <div class="grid grid-2">
+      <div class="panel">
+        <h3>輸入（示例）</h3>
+        <div class="field"><label for="impX">海外確診的輸出病例數</label><input id="impX" type="number" min="0" value="3"></div>
+        <div class="field"><label for="impT">來源地每日出境國際旅客數</label><input id="impT" type="number" min="1" value="3300"></div>
+        <div class="field"><label for="impN">來源地機場服務的人口數</label><input id="impN" type="number" min="1" value="19000000"></div>
+        <div class="field"><label for="impW">偵測時間窗（天）</label><input id="impW" type="number" step="0.5" value="10">
+          <div class="hint">病例從感染到在海外被確診的平均時間，通常取潛伏期加上發病到確診的天數。</div></div>
+        <div class="field"><label for="impConf">信賴水準</label><input id="impConf" type="number" step="0.01" value="0.95"></div>
+        <div class="btn-row"><button class="btn" id="calcBack">計算</button></div>
+      </div>
+      <div>
+        <div class="kpis" id="kpiBack"></div>
+        <div id="chartBack" class="chart"></div>
+        <details><summary>方法與假設</summary>
+          <div class="formula">p = 每日出境旅客數 × 偵測時間窗 / 服務人口
+估計病例數 = x / p
+信賴區間：x 視為 Poisson 計數，用精確區間 [Γ⁻¹(α/2; x), Γ⁻¹(1 − α/2; x + 1)] 再除以 p</div>
+          <p class="note">方法依據 Imai 等（2020）。假設旅客是來源地人口的隨機樣本、所有輸出病例都被偵測到、出境旅客量沒有因疫情改變。若海外偵測不完全，實際病例數會更高。原報告用二項分佈計算區間，本工具用 Poisson 精確區間，p 很小時兩者接近。</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <section class="tab-panel" id="tab-fwd">
+    <div class="grid grid-2">
+      <div class="panel">
+        <h3>來源地（示例）</h3>
+        <div class="field"><label for="fwdCases">來源地目前的感染人數</label><input id="fwdCases" type="number" min="0" value="5000"></div>
+        <div class="field"><label for="fwdN">來源地人口數</label><input id="fwdN" type="number" min="1" value="19000000"></div>
+        <div class="field"><label for="fwdW">旅客可能帶病出境的時間窗（天）</label><input id="fwdW" type="number" step="0.5" value="10"></div>
+        <div class="field"><label for="fwdDest">目的地與每日旅客數（CSV：目的地,每日旅客數）</label>
+          <textarea id="fwdDest" rows="8">目的地,每日旅客數
+城市 A,1200
+城市 B,800
+城市 C,450
+城市 D,150</textarea></div>
+        <div class="btn-row"><button class="btn" id="calcFwd">計算</button><button class="btn secondary" id="exportFwd">匯出 CSV</button></div>
+      </div>
+      <div>
+        <div class="kpis" id="kpiFwd"></div>
+        <div id="chartFwd" class="chart"></div>
+        <div class="table-wrap" id="outFwd"></div>
+        <details><summary>方法與假設</summary>
+          <div class="formula">μ（目的地 j 的預期輸入病例數）= 感染人數 × 每日旅客數ⱼ × 時間窗 / 人口數
+至少輸入一例的機率 = 1 − exp(−μ)</div>
+          <p class="note">假設旅客感染比例與來源地人口相同，不考慮出境篩檢、病例因症狀放棄旅行，以及旅客與一般人口的暴露差異。</p>
+        </details>
+      </div>
+    </div>
+  </section>
+</main>
+<div id="site-footer"></div>
+<script src="assets/js/epi.js"></script>
+<script src="assets/js/layout.js"></script>
+<script>
+UI.initTabs();
+
+UI.run('calcBack', () => {
+  const x = UI.num('impX', { min: 0, int: true }), T = UI.num('impT', { min: 1 });
+  const N = UI.num('impN', { min: 1 }), W = UI.num('impW', { min: 0.5, max: 60 });
+  const conf = UI.num('impConf', { min: 0.5, max: 0.999 });
+  const r = Epi.imaiEstimate(x, T, N, W, conf);
+  UI.kpis('kpiBack', [
+    ['單一病例出境並被偵測的機率 p', r.p.toExponential(3)],
+    ['來源地估計病例數', UI.fmt(r.estimate, 0)],
+    [`${UI.fmt(conf * 100, 1)}% 信賴區間`, `${UI.fmt(r.lo, 0)} – ${UI.fmt(r.hi, 0)}`]
+  ]);
+  const ws = [], est = [], lo = [], hi = [];
+  for (let w = Math.max(1, W / 2); w <= W * 2 + 1e-9; w += Math.max(0.25, W / 40)) {
+    if (T * w / N >= 1) break;
+    const e = Epi.imaiEstimate(x, T, N, w, conf);
+    ws.push(w); est.push(e.estimate); lo.push(e.lo); hi.push(e.hi);
+  }
+  UI.plot('chartBack', [
+    { x: ws, y: hi, mode: 'lines', line: { width: 0 }, showlegend: false, hoverinfo: 'skip' },
+    { x: ws, y: lo, mode: 'lines', line: { width: 0 }, fill: 'tonexty', fillcolor: 'rgba(87,6,140,.18)', name: '信賴區間' },
+    { x: ws, y: est, mode: 'lines', name: '估計值', line: { color: '#57068c', width: 3 } },
+    { x: [W], y: [r.estimate], mode: 'markers', name: '目前設定', marker: { size: 11, color: '#e07b00' } }
+  ], { title: '估計值對偵測時間窗的敏感度', xaxis: { title: '偵測時間窗（天）' }, yaxis: { title: '來源地病例數' } });
+})();
+
+function parseDest(text) {
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const out = [];
+  lines.forEach((line, i) => {
+    const f = line.split(/[,\t，]/).map(s => s.trim());
+    if (i === 0 && !Number.isFinite(Number(f[1]))) return; // 標題列
+    const v = Number(f[1]);
+    if (f.length < 2 || !f[0] || !Number.isFinite(v) || v < 0) throw new Error(`目的地清單第 ${i + 1} 行格式錯誤，應為「目的地,每日旅客數」`);
+    out.push({ name: f[0], travellers: v });
+  });
+  if (out.length === 0) throw new Error('請至少輸入一個目的地');
+  return out;
+}
+let lastFwd = null;
+const calcFwd = UI.run('calcFwd', () => {
+  const cases = UI.num('fwdCases', { min: 0 }), N = UI.num('fwdN', { min: 1 }), W = UI.num('fwdW', { min: 0.5, max: 60 });
+  if (cases > N) throw new Error('感染人數不能超過人口數');
+  const dest = parseDest(document.getElementById('fwdDest').value);
+  const rows = dest.map(d => {
+    const mu = cases * d.travellers * W / N;
+    return { ...d, mu, p1: 1 - Math.exp(-mu) };
+  }).sort((a, b) => b.mu - a.mu);
+  const totalMu = rows.reduce((s, r) => s + r.mu, 0);
+  lastFwd = rows;
+  UI.kpis('kpiFwd', [
+    ['所有目的地的預期輸入病例數', UI.fmt(totalMu, 2)],
+    ['至少一個目的地出現輸入病例的機率', UI.pct(1 - Math.exp(-totalMu), 1)],
+    ['預期輸入病例最多的目的地', UI.esc(rows[0].name)]
+  ]);
+  UI.plot('chartFwd', [
+    { type: 'bar', x: rows.map(r => r.name), y: rows.map(r => r.mu), name: '預期輸入病例數', marker: { color: '#57068c' } }
+  ], { title: '各目的地的預期輸入病例數', yaxis: { title: '病例數' }, showlegend: false });
+  document.getElementById('outFwd').innerHTML = `<table class="data"><thead><tr><th>目的地</th><th>每日旅客數</th><th>預期輸入病例數</th><th>至少一例的機率</th></tr></thead><tbody>
+    ${rows.map(r => `<tr><td>${UI.esc(r.name)}</td><td>${UI.fmt(r.travellers, 0)}</td><td>${UI.fmt(r.mu, 3)}</td><td>${UI.pct(r.p1, 1)}</td></tr>`).join('')}
+    </tbody></table>`;
+});
+calcFwd();
+document.getElementById('exportFwd').addEventListener('click', () => {
+  if (!lastFwd) return;
+  UI.downloadCSV('importation.csv', [['目的地', '每日旅客數', '預期輸入病例數', '至少一例的機率'], ...lastFwd.map(r => [r.name, r.travellers, r.mu, r.p1])]);
+});
+</script>
+</body>
+</html>
