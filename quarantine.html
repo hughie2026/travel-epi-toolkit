@@ -1,1 +1,141 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>檢疫與檢測策略｜旅行流行病學工具箱</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body data-page="quarantine">
+<div id="site-header"></div>
+<section class="hero hero-sm"><div class="inner"><p class="eyebrow">傳染病｜邊境措施</p><h1>檢疫與檢測策略</h1><p>模擬已感染的入境旅客在不同檢疫天數與檢測時點下，解除檢疫後仍殘留多少傳染期。</p></div></section>
+<main id="main" class="container">
+  <div class="error" id="error" role="alert" hidden></div>
+  <div class="grid grid-2">
+    <div class="panel">
+      <h3>潛伏期（對數常態）</h3>
+      <div class="row-2">
+        <div class="field"><label for="qMl">meanlog μ</label><input id="qMl" type="number" step="0.001" value="1.621"></div>
+        <div class="field"><label for="qSl">sdlog σ</label><input id="qSl" type="number" step="0.001" value="0.418"></div>
+      </div>
+      <p class="hint">預設值取自 Lauer 等（2020）的 COVID-19 估計，中位數 e^μ ≈ 5.1 天。</p>
+      <h3>傳染力與病程（示例）</h3>
+      <div class="row-2">
+        <div class="field"><label for="qPre">發病前可傳染天數</label><input id="qPre" type="number" step="0.5" value="2"></div>
+        <div class="field"><label for="qPost">發病後可傳染天數</label><input id="qPost" type="number" step="0.5" value="7"></div>
+      </div>
+      <div class="field"><label for="qAsym">無症狀感染比例</label><input id="qAsym" type="number" step="0.05" value="0.3"></div>
+      <div class="field"><label for="qW">入境前的感染時間窗（天）</label><input id="qW" type="number" step="0.5" value="7">
+        <div class="hint">假設感染時間在入境前這段期間內均勻分佈。</div></div>
+      <h3>檢測（示例）</h3>
+      <div class="field"><label for="qSens">檢測敏感度（可檢出期間內）</label><input id="qSens" type="number" step="0.05" value="0.8"></div>
+      <div class="row-2">
+        <div class="field"><label for="qDetPre">發病前幾天可檢出</label><input id="qDetPre" type="number" step="0.5" value="3"></div>
+        <div class="field"><label for="qDetPost">發病後幾天仍可檢出</label><input id="qDetPost" type="number" step="0.5" value="14"></div>
+      </div>
+      <div class="field check"><label><input type="checkbox" id="qSym" checked> 檢疫期間出現症狀者會被發現</label></div>
+      <div class="field check"><label><input type="checkbox" id="qExcl" checked> 出發前已發病者不會搭機</label></div>
+      <h3>自訂策略</h3>
+      <div class="row-2">
+        <div class="field"><label for="qQ">檢疫天數</label><input id="qQ" type="number" value="7"></div>
+        <div class="field"><label for="qTests">檢測日（逗號分隔）</label><input id="qTests" value="0,5"></div>
+      </div>
+      <h3>模擬設定</h3>
+      <div class="row-2">
+        <div class="field"><label for="qQmax">比較圖的最長檢疫天數</label><input id="qQmax" type="number" value="14"></div>
+        <div class="field"><label for="qN">每組模擬人數</label><input id="qN" type="number" value="20000"></div>
+      </div>
+      <div class="field"><label for="qSeed">亂數種子</label><input id="qSeed" type="number" value="2024"></div>
+      <div class="btn-row"><button class="btn" id="calcQ">執行模擬</button><button class="btn secondary" id="exportQ">匯出 CSV</button></div>
+    </div>
+    <div>
+      <div class="kpis" id="kpis"></div>
+      <div id="chart" class="chart"></div>
+      <details><summary>結果表</summary><div class="table-wrap" id="out"></div></details>
+      <details><summary>方法與假設</summary>
+        <div class="formula">入境日為第 0 天；感染時間 ~ Uniform(−W, 0)
+發病時間 = 感染時間 + 潛伏期，潛伏期 ~ LogNormal(μ, σ)
+傳染期 = [發病 − 發病前天數, 發病 + 發病後天數]（無症狀者以假想的發病時間計算）
+檢測日 d 在 [發病 − 可檢出前天數, 發病 + 可檢出後天數] 內時，以敏感度的機率檢出
+殘留傳染期比例 = Σ 解除檢疫後的傳染天數 / Σ 入境後的傳染天數（無任何措施時）</div>
+        <p class="note">檢測敏感度在可檢出期間內設為常數。實際 PCR 敏感度隨感染後天數變化（Kucirka 等 2020），這裡做了簡化。各次檢測結果彼此獨立。未考慮檢疫期間的傳播、檢疫遵從度與檢測結果的等待時間。</p>
+      </details>
+    </div>
+  </div>
+</main>
+<div id="site-footer"></div>
+<script src="assets/js/epi.js"></script>
+<script src="assets/js/layout.js"></script>
+<script>
+const STRATS = [
+  ['僅檢疫，不檢測', Q => []],
+  ['檢疫結束當天檢測', Q => [Q]],
+  ['入境與檢疫結束當天各檢測一次', Q => (Q === 0 ? [0] : [0, Q])]
+];
+let lastQ = null;
 
+function readParams() {
+  const o = {
+    ml: UI.num('qMl', { min: -2, max: 5 }), sl: UI.num('qSl', { min: 0.01, max: 3 }),
+    pre: UI.num('qPre', { min: 0, max: 14 }), post: UI.num('qPost', { min: 0, max: 30 }),
+    asym: UI.num('qAsym', { min: 0, max: 1 }), W: UI.num('qW', { min: 0.1, max: 60 }),
+    sens: UI.num('qSens', { min: 0, max: 1 }),
+    detPre: UI.num('qDetPre', { min: 0, max: 14 }), detPost: UI.num('qDetPost', { min: 0, max: 60 }),
+    symptomDetect: UI.checked('qSym'), excludePre: UI.checked('qExcl'),
+    n: UI.num('qN', { min: 1000, max: 200000, int: true })
+  };
+  if (o.pre + o.post === 0) throw new Error('可傳染期長度為 0，請檢查「發病前／後可傳染天數」');
+  return o;
+}
+function readTests(Q) {
+  const raw = UI.text('qTests');
+  if (raw === '') return [];
+  return raw.split(/[,，\s]+/).filter(Boolean).map(s => {
+    const v = Number(s);
+    if (!Number.isFinite(v) || v < 0) throw new Error(`檢測日「${s}」必須是非負數字`);
+    if (v > Q) throw new Error(`檢測日 ${v} 晚於檢疫結束日 ${Q}，請改為 0 到 ${Q} 之間`);
+    return v;
+  });
+}
+
+const calc = UI.run('calcQ', () => {
+  const base = readParams();
+  const Q = UI.num('qQ', { min: 0, max: 60 }), tests = readTests(Q);
+  const Qmax = UI.num('qQmax', { min: 1, max: 30, int: true });
+  const seedRaw = UI.text('qSeed');
+  if (seedRaw !== '' && !Number.isInteger(Number(seedRaw))) throw new Error('「亂數種子」需要是整數或留白');
+  const seed = seedRaw === '' ? NaN : Number(seedRaw);
+  const sim = (q, t) => { Epi.setSeed(seed); return Epi.quarantineSim({ ...base, Q: q, tests: t }); }; // 共同亂數，降低策略間的雜訊
+
+  const qs = Array.from({ length: Qmax + 1 }, (_, i) => i);
+  const grid = STRATS.map(([name, f]) => ({ name, res: qs.map(q => sim(q, f(q))) }));
+  const custom = sim(Q, tests);
+  lastQ = { qs, grid };
+
+  UI.kpis('kpis', [
+    ['自訂策略：殘留傳染期比例', UI.pct(custom.residualFraction, 1)],
+    ['自訂策略：傳染期減少', UI.pct(1 - custom.residualFraction, 1)],
+    ['自訂策略：檢疫期間被發現的比例', UI.pct(custom.detectedFraction, 1)],
+    ['自訂策略：解除時仍具傳染力的旅客比例', UI.pct(custom.releasedInfectiousFraction, 1)]
+  ]);
+  UI.plot('chart', [
+    ...grid.map(g => ({ x: qs, y: g.res.map(r => r.residualFraction * 100), mode: 'lines+markers', name: g.name, marker: { size: 6 } })),
+    { x: [Q], y: [custom.residualFraction * 100], mode: 'markers', name: `自訂策略（檢測日：${tests.length ? tests.join('、') : '無'}）`, marker: { size: 14, symbol: 'star', color: '#e07b00' } }
+  ], { title: '解除檢疫後殘留的傳染期比例', xaxis: { title: '檢疫天數', dtick: 1 }, yaxis: { title: '殘留比例（%）', range: [0, 100] } });
+
+  document.getElementById('out').innerHTML = `<table class="data"><thead><tr><th>檢疫天數</th>${grid.map(g => `<th>${g.name}</th>`).join('')}</tr></thead><tbody>
+    ${qs.map((q, i) => `<tr><td>${q}</td>${grid.map(g => `<td>${UI.pct(g.res[i].residualFraction, 1)}</td>`).join('')}</tr>`).join('')}
+    </tbody></table>`;
+});
+calc();
+
+document.getElementById('exportQ').addEventListener('click', () => {
+  if (!lastQ) return;
+  const rows = [['策略', '檢疫天數', '殘留傳染期比例', '檢疫期間被發現比例', '解除時仍具傳染力比例']];
+  lastQ.grid.forEach(g => g.res.forEach((r, i) => rows.push([g.name, lastQ.qs[i], r.residualFraction, r.detectedFraction, r.releasedInfectiousFraction])));
+  UI.downloadCSV('quarantine.csv', rows);
+});
+</script>
+</body>
+</html>
