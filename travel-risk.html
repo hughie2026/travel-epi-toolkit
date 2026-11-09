@@ -13,6 +13,7 @@
 <main id="main" class="container">
   <div class="warn">表格預設的發生率與防護效力是示例數值，請換成 CDC Yellow Book、WHO 或文獻中與目的地、季節、旅行型態相符的數值。</div>
   <div class="error" id="error" role="alert" hidden></div>
+
   <h2>行程與風險項目</h2>
   <div class="table-wrap">
     <table class="data">
@@ -28,21 +29,122 @@
 
   <h2>結果</h2>
   <div class="kpis" id="kpis"></div>
+  <div class="field check"><label><input type="checkbox" id="logy" checked> 縱軸使用對數尺度</label></div>
   <div id="chart" class="chart"></div>
   <div class="table-wrap" id="out"></div>
+
   <details><summary>方法與假設</summary>
-    <div class="formula">每段風險 p = 1 − exp(−r × d / 30)，r 為每位旅客每月發生率（每千旅客月 ÷ 1000），d 為停留天數
-防護後 p' = 1 − exp(−r(1 − e) × d / 30)，e 為防護效力
-絕對風險降低 ARR = p − p'，需治療（接種）人數 NNT = 1 / ARR
-整趟行程至少發生一項：1 − Π(1 − pᵢ)</div>
-    <p class="note">假設發生率在停留期間固定、各項目彼此獨立。區間只反映發生率上下限的不確定性，防護效力以點估計計算。</p>
+    <div class="formula">每段風險 p = 1 − exp(−r × d / 30)
+  r：每位旅客每月發生率（每千旅客月 ÷ 1000），d：停留天數
+防護後 p' = 1 − exp(−r(1 − e) × d / 30)，e：防護效力
+絕對風險降低 ARR = p − p'，需治療（接種）人數 NNT = ⌈1 / ARR⌉
+整趟行程至少發生一項 = 1 − Π(1 − pᵢ)</div>
+    <p class="note">假設發生率在停留期間固定，各項目彼此獨立。區間只反映發生率上下限的不確定性，整趟行程的區間假設各項目同時取上限或同時取下限。防護效力以點估計計算。</p>
   </details>
 </main>
 <div id="site-footer"></div>
 <script src="assets/js/epi.js"></script>
 <script src="assets/js/layout.js"></script>
 <script>
-const COLS = { days: '停留天數', rate: '發生率', lo: '下限', hi: '上限', eff: '防護效力' };
 const rows = [
   { name: '旅行者腹瀉（示例）', days: 14, rate: 300, lo: 200, hi: 500, eff: 0 },
-  { name: 'A 型肝炎（示例）', days: 14, rate: 0.3, lo
+  { name: 'A 型肝炎（示例）', days: 14, rate: 0.3, lo: 0.1, hi: 1, eff: 95 },
+  { name: '登革熱（示例）', days: 14, rate: 5, lo: 2, hi: 15, eff: 50 },
+  { name: '瘧疾（示例）', days: 7, rate: 2, lo: 0.5, hi: 5, eff: 75 }
+];
+const FIELDS = [
+  ['days', '停留天數', 0.001, 3650], ['rate', '發生率', 0, 1e6],
+  ['lo', '下限', 0, 1e6], ['hi', '上限', 0, 1e6], ['eff', '防護效力', 0, 100]
+];
+const tbody = document.getElementById('legs');
+
+function render() {
+  tbody.innerHTML = rows.map((r, i) => `<tr>
+    <td><input data-i="${i}" data-k="name" value="${UI.esc(r.name)}" aria-label="第 ${i + 1} 列：項目"></td>
+    ${FIELDS.map(([k, label]) => `<td><input type="number" step="any" data-i="${i}" data-k="${k}" value="${UI.esc(r[k])}" aria-label="第 ${i + 1} 列：${label}"></td>`).join('')}
+    <td><button class="btn-link" data-del="${i}">刪除</button></td></tr>`).join('');
+}
+tbody.addEventListener('input', e => {
+  const { i, k } = e.target.dataset;
+  if (k) rows[Number(i)][k] = e.target.value;
+});
+tbody.addEventListener('click', e => {
+  const i = e.target.dataset.del;
+  if (i !== undefined) { rows.splice(Number(i), 1); render(); }
+});
+document.getElementById('add').addEventListener('click', () => {
+  rows.push({ name: `項目 ${rows.length + 1}`, days: 7, rate: 1, lo: 0.5, hi: 2, eff: 0 });
+  render();
+});
+render();
+
+function readRows() {
+  if (rows.length === 0) throw new Error('請至少輸入一列');
+  return rows.map((r, i) => {
+    const o = { name: String(r.name).trim() || `項目 ${i + 1}` };
+    for (const [k, label, min, max] of FIELDS) {
+      const raw = String(r[k]).trim(), v = Number(raw);
+      if (raw === '' || !Number.isFinite(v) || v < min || v > max) {
+        throw new Error(`第 ${i + 1} 列「${label}」應為 ${min} 到 ${max} 之間的數字`);
+      }
+      o[k] = v;
+    }
+    if (!(o.lo <= o.rate && o.rate <= o.hi)) throw new Error(`第 ${i + 1} 列需滿足：下限 ≤ 發生率 ≤ 上限`);
+    return o;
+  });
+}
+const risk = (rate, days, eff = 0) => Epi.riskFromRate(rate / 1000 * (1 - eff / 100), days / 30);
+
+function compute() {
+  const legs = readRows().map(o => {
+    const p = risk(o.rate, o.days), pp = risk(o.rate, o.days, o.eff), arr = p - pp;
+    return { ...o, p, pLo: risk(o.lo, o.days), pHi: risk(o.hi, o.days), pp, arr, nnt: arr > 0 ? Math.ceil(1 / arr) : Infinity };
+  });
+  const any = k => 1 - legs.reduce((s, l) => s * (1 - l[k]), 1);
+  return { legs, total: any('p'), totalLo: any('pLo'), totalHi: any('pHi'), totalP: any('pp') };
+}
+
+const calc = UI.run('calc', () => {
+  const r = compute();
+  UI.kpis('kpis', [
+    ['整趟行程至少發生一項（無防護）', `${UI.pct(r.total)}<br><small>${UI.pct(r.totalLo)} – ${UI.pct(r.totalHi)}</small>`],
+    ['整趟行程至少發生一項（有防護）', UI.pct(r.totalP)],
+    ['防護措施的整體絕對風險降低', UI.pct(r.total - r.totalP)],
+    ['每 1,000 名旅客中受影響人數（無防護）', UI.fmt(r.total * 1000, 1)]
+  ]);
+  const names = r.legs.map(l => l.name);
+  UI.plot('chart', [
+    {
+      type: 'bar', name: '無防護', x: names, y: r.legs.map(l => l.p * 100),
+      error_y: { type: 'data', symmetric: false, array: r.legs.map(l => (l.pHi - l.p) * 100), arrayminus: r.legs.map(l => (l.p - l.pLo) * 100), color: '#330662' }
+    },
+    { type: 'bar', name: '有防護', x: names, y: r.legs.map(l => l.pp * 100) }
+  ], {
+    title: '各項目在停留期間的發生機率', barmode: 'group',
+    yaxis: { title: '機率（%）', type: UI.checked('logy') ? 'log' : 'linear' }
+  });
+  document.getElementById('out').innerHTML = `<table class="data"><thead><tr>
+    <th>項目</th><th>天數</th><th>無防護風險</th><th>區間</th><th>有防護風險</th><th>ARR</th><th>NNT</th></tr></thead><tbody>
+    ${r.legs.map(l => `<tr><td>${UI.esc(l.name)}</td><td>${UI.fmt(l.days, 1)}</td><td>${UI.pct(l.p, 3)}</td>
+      <td>${UI.pct(l.pLo, 3)} – ${UI.pct(l.pHi, 3)}</td><td>${UI.pct(l.pp, 3)}</td><td>${UI.pct(l.arr, 3)}</td>
+      <td>${Number.isFinite(l.nnt) ? UI.fmt(l.nnt, 0) : '—'}</td></tr>`).join('')}
+    </tbody></table>`;
+});
+calc();
+document.getElementById('logy').addEventListener('change', calc);
+
+document.getElementById('export').addEventListener('click', () => {
+  const box = document.getElementById('error');
+  try {
+    box.hidden = true;
+    const r = compute();
+    UI.downloadCSV('travel-risk.csv', [
+      ['項目', '停留天數', '發生率(每千旅客月)', '下限', '上限', '防護效力(%)', '無防護風險', '風險下限', '風險上限', '有防護風險', 'ARR', 'NNT'],
+      ...r.legs.map(l => [l.name, l.days, l.rate, l.lo, l.hi, l.eff, l.p, l.pLo, l.pHi, l.pp, l.arr, Number.isFinite(l.nnt) ? l.nnt : '']),
+      ['整趟行程', '', '', '', '', '', r.total, r.totalLo, r.totalHi, r.totalP, r.total - r.totalP, '']
+    ]);
+  } catch (e) { box.textContent = e.message; box.hidden = false; }
+});
+</script>
+</body>
+</html>
