@@ -1,1 +1,170 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>基礎流行病學計算｜旅行流行病學工具箱</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body data-page="calculators">
+<div id="site-header"></div>
+<section class="hero hero-sm"><div class="inner"><p class="eyebrow">通用工具</p><h1>基礎流行病學計算</h1><p>2×2 表效應量、發生率與精確信賴區間、樣本數估算。</p></div></section>
+<main id="main" class="container">
+  <div class="tabs" role="tablist">
+    <button class="active" data-tab="tab-22" role="tab" aria-selected="true">2×2 表</button>
+    <button data-tab="tab-rate" role="tab" aria-selected="false">發生率</button>
+    <button data-tab="tab-ss" role="tab" aria-selected="false">樣本數</button>
+  </div>
+  <div class="error" id="error" role="alert" hidden></div>
 
+  <section class="tab-panel active" id="tab-22">
+    <div class="grid grid-2">
+      <div class="panel">
+        <h3>輸入</h3>
+        <table class="data">
+          <thead><tr><th></th><th>病例</th><th>非病例</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">暴露</th><td><input id="a" type="number" min="0" value="20" aria-label="暴露組病例 a"></td><td><input id="b" type="number" min="0" value="80" aria-label="暴露組非病例 b"></td></tr>
+            <tr><th scope="row">未暴露</th><td><input id="c" type="number" min="0" value="10" aria-label="未暴露組病例 c"></td><td><input id="d" type="number" min="0" value="90" aria-label="未暴露組非病例 d"></td></tr>
+          </tbody>
+        </table>
+        <div class="field"><label for="conf22">信賴水準</label><input id="conf22" type="number" step="0.01" value="0.95"></div>
+        <div class="btn-row"><button class="btn" id="calc22">計算</button></div>
+      </div>
+      <div>
+        <div id="out22"></div>
+        <details><summary>公式</summary><div class="formula">RR = [a/(a+b)] / [c/(c+d)]，  SE(ln RR) = √(1/a − 1/(a+b) + 1/c − 1/(c+d))
+OR = ad / bc，  SE(ln OR) = √(1/a + 1/b + 1/c + 1/d)（Woolf 法）
+RD = p₁ − p₀，  SE = √(p₁(1−p₁)/n₁ + p₀(1−p₀)/n₀)
+暴露組可歸因分率 = (RR − 1) / RR
+族群可歸因分率（Levin）= pₑ(RR − 1) / [1 + pₑ(RR − 1)]，pₑ 取自本表暴露比例</div>
+        <p class="note">族群可歸因分率只有在本表的暴露比例能代表目標族群時才有意義（例如世代研究）。病例對照研究請只看勝算比。</p></details>
+      </div>
+    </div>
+  </section>
+
+  <section class="tab-panel" id="tab-rate">
+    <div class="grid grid-2">
+      <div class="panel">
+        <h3>第 1 組</h3>
+        <div class="row-2">
+          <div class="field"><label for="x1">事件數</label><input id="x1" type="number" min="0" value="12"></div>
+          <div class="field"><label for="pt1">人時（人日）</label><input id="pt1" type="number" min="0" value="42000"></div>
+        </div>
+        <div class="field check"><label><input type="checkbox" id="compare" checked> 與第 2 組比較（發生率比）</label></div>
+        <h3>第 2 組</h3>
+        <div class="row-2">
+          <div class="field"><label for="x2">事件數（第 2 組）</label><input id="x2" type="number" min="0" value="5"></div>
+          <div class="field"><label for="pt2">人時（第 2 組，人日）</label><input id="pt2" type="number" min="0" value="38000"></div>
+        </div>
+        <div class="field"><label for="unit">呈現單位</label>
+          <select id="unit">
+            <option value="1000">每 1,000 人日</option>
+            <option value="30000" selected>每 1,000 旅客月（30 天）</option>
+            <option value="36500000">每 10 萬人年</option>
+          </select></div>
+        <div class="field"><label for="confRate">信賴水準</label><input id="confRate" type="number" step="0.01" value="0.95"></div>
+        <div class="btn-row"><button class="btn" id="calcRate">計算</button></div>
+      </div>
+      <div>
+        <div id="outRate"></div>
+        <details><summary>公式</summary><div class="formula">發生率 = x / PT
+精確信賴區間（Poisson）：下限 = Γ⁻¹(α/2; x, 1) / PT，上限 = Γ⁻¹(1 − α/2; x + 1, 1) / PT
+發生率比 IRR = (x₁/PT₁) / (x₂/PT₂)，SE(ln IRR) = √(1/x₁ + 1/x₂)</div></details>
+      </div>
+    </div>
+  </section>
+
+  <section class="tab-panel" id="tab-ss">
+    <div class="grid grid-halves">
+      <div class="panel">
+        <h3>估計單一比例（例如旅客盛行率調查）</h3>
+        <div class="field"><label for="ssP">預期比例</label><input id="ssP" type="number" step="0.01" value="0.3"></div>
+        <div class="field"><label for="ssD">可接受誤差（絕對值）</label><input id="ssD" type="number" step="0.005" value="0.05"></div>
+        <div class="field"><label for="ssConf">信賴水準</label><input id="ssConf" type="number" step="0.01" value="0.95"></div>
+        <div class="field"><label for="ssDrop1">預期流失率（%）</label><input id="ssDrop1" type="number" value="10"></div>
+        <h3>比較兩組比例</h3>
+        <div class="row-2">
+          <div class="field"><label for="ssP1">第 1 組比例</label><input id="ssP1" type="number" step="0.01" value="0.2"></div>
+          <div class="field"><label for="ssP2">第 2 組比例</label><input id="ssP2" type="number" step="0.01" value="0.1"></div>
+        </div>
+        <div class="row-2">
+          <div class="field"><label for="ssAlpha">顯著水準 α（雙尾）</label><input id="ssAlpha" type="number" step="0.01" value="0.05"></div>
+          <div class="field"><label for="ssPower">檢定力</label><input id="ssPower" type="number" step="0.05" value="0.8"></div>
+        </div>
+        <div class="field"><label for="ssDrop2">預期流失率（%，兩組）</label><input id="ssDrop2" type="number" value="10"></div>
+        <div class="btn-row"><button class="btn" id="calcSS">計算</button></div>
+      </div>
+      <div>
+        <div id="outSS"></div>
+        <details><summary>公式</summary><div class="formula">單一比例：n = z²·p(1 − p) / d²
+兩組比例（每組，不含連續性校正）：
+n = [z₁₋α/₂ √(2p̄(1 − p̄)) + z₁₋β √(p₁(1 − p₁) + p₂(1 − p₂))]² / (p₁ − p₂)²
+考慮流失：n / (1 − 流失率)</div></details>
+      </div>
+    </div>
+  </section>
+</main>
+<div id="site-footer"></div>
+<script src="assets/js/epi.js"></script>
+<script src="assets/js/layout.js"></script>
+<script>
+UI.initTabs();
+
+UI.run('calc22', () => {
+  const o = { min: 0, int: true };
+  const a = UI.num('a', o), b = UI.num('b', o), c = UI.num('c', o), d = UI.num('d', o);
+  const conf = UI.num('conf22', { min: 0.5, max: 0.999 });
+  if (a + b === 0 || c + d === 0) throw new Error('暴露組與未暴露組的總人數都必須大於 0');
+  const r = Epi.twoByTwo(a, b, c, d, conf), ci = ([l, h], f = UI.fmt) => `${f(l, 3)} – ${f(h, 3)}`;
+  document.getElementById('out22').innerHTML = `
+    ${r.corrected ? '<p class="warn">表中有 0 的格子，已對全部格子加 0.5（Haldane 校正）。</p>' : ''}
+    <table class="data"><thead><tr><th>指標</th><th>估計值</th><th>${UI.fmt(conf * 100, 1)}% 信賴區間</th></tr></thead><tbody>
+      <tr><td>暴露組風險 p₁</td><td>${UI.pct(r.p1)}</td><td></td></tr>
+      <tr><td>未暴露組風險 p₀</td><td>${UI.pct(r.p0)}</td><td></td></tr>
+      <tr><td>風險比 RR</td><td>${UI.fmt(r.rr, 3)}</td><td>${ci(r.rrCI)}</td></tr>
+      <tr><td>勝算比 OR</td><td>${UI.fmt(r.or, 3)}</td><td>${ci(r.orCI)}</td></tr>
+      <tr><td>風險差 RD</td><td>${UI.pct(r.rd)}</td><td>${ci(r.rdCI, x => UI.pct(x))}</td></tr>
+      <tr><td>暴露組可歸因分率</td><td>${UI.pct(r.afe, 1)}</td><td></td></tr>
+      <tr><td>族群可歸因分率</td><td>${UI.pct(r.paf, 1)}</td><td></td></tr>
+    </tbody></table>`;
+})();
+
+UI.run('calcRate', () => {
+  const x1 = UI.num('x1', { min: 0, int: true }), pt1 = UI.num('pt1', { min: 1e-9 });
+  const mult = Number(document.getElementById('unit').value);
+  const unitLabel = document.getElementById('unit').selectedOptions[0].textContent;
+  const conf = UI.num('confRate', { min: 0.5, max: 0.999 });
+  const r1 = Epi.poissonRateCI(x1, pt1, conf);
+  let html = `<table class="data"><thead><tr><th>組別</th><th>發生率（${unitLabel}）</th><th>${UI.fmt(conf * 100, 1)}% 精確信賴區間</th></tr></thead><tbody>
+    <tr><td>第 1 組</td><td>${UI.fmt(r1.rate * mult, 3)}</td><td>${UI.fmt(r1.lo * mult, 3)} – ${UI.fmt(r1.hi * mult, 3)}</td></tr>`;
+  if (UI.checked('compare')) {
+    const x2 = UI.num('x2', { min: 0, int: true }), pt2 = UI.num('pt2', { min: 1e-9 });
+    const r2 = Epi.poissonRateCI(x2, pt2, conf);
+    html += `<tr><td>第 2 組</td><td>${UI.fmt(r2.rate * mult, 3)}</td><td>${UI.fmt(r2.lo * mult, 3)} – ${UI.fmt(r2.hi * mult, 3)}</td></tr>`;
+    if (x1 > 0 && x2 > 0) {
+      const irr = r1.rate / r2.rate, se = Math.sqrt(1 / x1 + 1 / x2), z = Epi.qnorm(1 - (1 - conf) / 2);
+      html += `<tr><td><strong>發生率比 IRR</strong></td><td><strong>${UI.fmt(irr, 3)}</strong></td><td>${UI.fmt(irr * Math.exp(-z * se), 3)} – ${UI.fmt(irr * Math.exp(z * se), 3)}</td></tr>`;
+    } else {
+      html += '<tr><td colspan="3" class="note">任一組事件數為 0 時，無法用對數法計算發生率比的信賴區間。</td></tr>';
+    }
+  }
+  document.getElementById('outRate').innerHTML = html + '</tbody></table>';
+})();
+
+UI.run('calcSS', () => {
+  const p = UI.num('ssP', { min: 0.0001, max: 0.9999 }), dd = UI.num('ssD', { min: 0.0001, max: 0.5 });
+  const conf = UI.num('ssConf', { min: 0.5, max: 0.999 }), drop1 = UI.num('ssDrop1', { min: 0, max: 90 }) / 100;
+  const p1 = UI.num('ssP1', { min: 0.0001, max: 0.9999 }), p2 = UI.num('ssP2', { min: 0.0001, max: 0.9999 });
+  const alpha = UI.num('ssAlpha', { min: 0.0001, max: 0.5 }), power = UI.num('ssPower', { min: 0.5, max: 0.999 });
+  const drop2 = UI.num('ssDrop2', { min: 0, max: 90 }) / 100;
+  if (p1 === p2) throw new Error('兩組比例相同時無法計算樣本數');
+  const n1 = Epi.sampleSizeProportion(p, dd, conf), n2 = Epi.sampleSizeTwoProportions(p1, p2, alpha, power);
+  document.getElementById('outSS').innerHTML = `<div class="kpis">
+    <div class="kpi"><div class="v">${UI.fmt(Math.ceil(n1 / (1 - drop1)), 0)}</div><div class="l">單一比例：需收案人數（含流失，未含流失為 ${UI.fmt(n1, 0)}）</div></div>
+    <div class="kpi"><div class="v">${UI.fmt(Math.ceil(n2 / (1 - drop2)), 0)}</div><div class="l">兩組比較：每組需收案人數（含流失，未含流失為 ${UI.fmt(n2, 0)}）</div></div>
+  </div>`;
+})();
+</script>
+</body>
+</html>
