@@ -1,1 +1,142 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>室內空氣傳播｜旅行流行病學工具箱</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body data-page="airborne">
+<div id="site-header"></div>
+<section class="hero hero-sm"><div class="inner"><p class="eyebrow">傳染病｜環境</p><h1>室內空氣傳播</h1><p>用 Wells–Riley 模型評估通風、停留時間與口罩的影響，或用 Rudnick–Milton 模型從實測 CO₂ 濃度估算感染機率。</p></div></section>
+<main id="main" class="container">
+  <div class="tabs" role="tablist">
+    <button class="active" data-tab="tab-wr" role="tab" aria-selected="true">Wells–Riley</button>
+    <button data-tab="tab-rm" role="tab" aria-selected="false">Rudnick–Milton（CO₂）</button>
+  </div>
+  <div class="error" id="error" role="alert" hidden></div>
+  <div class="warn">量子產生率（quanta/h）因病原體、變異株、感染者活動強度而相差數十倍，結果對這個參數非常敏感。預設值為示例，請依文獻設定並比較多個數值。</div>
 
+  <section class="tab-panel active" id="tab-wr">
+    <div class="grid grid-2">
+      <div class="panel">
+        <div class="field"><label for="wPreset">預設情境（示例）</label>
+          <select id="wPreset"><option value="cabin">機艙，長程 8 小時</option><option value="bus">長途巴士，4 小時</option><option value="ship">船艙 4 人房，10 小時</option><option value="rest">餐廳，1.5 小時</option></select></div>
+        <div class="row-2">
+          <div class="field"><label for="wI">感染者人數</label><input id="wI" type="number" value="1"></div>
+          <div class="field"><label for="wN">易感者人數</label><input id="wN" type="number" value="150"></div>
+        </div>
+        <div class="field"><label for="wQuanta">量子產生率 q（quanta/h）</label><input id="wQuanta" type="number" step="any" value="25"></div>
+        <div class="field"><label for="wP">易感者呼吸量 p（m³/h）</label><input id="wP" type="number" step="0.05" value="0.5"><div class="hint">靜坐約 0.5 m³/h。</div></div>
+        <div class="field"><label for="wT">暴露時間 t（小時）</label><input id="wT" type="number" step="0.5" value="8"></div>
+        <div class="field"><label for="wQ">新鮮空氣通風量 Q（m³/h）</label><input id="wQ" type="number" step="any" value="5400"><div class="hint">Q = 空間體積（m³）× 每小時換氣次數。</div></div>
+        <div class="row-2">
+          <div class="field"><label for="wMI">感染者口罩過濾效率（%）</label><input id="wMI" type="number" value="0"></div>
+          <div class="field"><label for="wMS">易感者口罩過濾效率（%）</label><input id="wMS" type="number" value="0"></div>
+        </div>
+        <div class="btn-row"><button class="btn" id="calcWR">計算</button></div>
+      </div>
+      <div>
+        <div class="kpis" id="kpiWR"></div>
+        <div id="chartWRt" class="chart short"></div>
+        <div id="chartWRq" class="chart short"></div>
+        <details><summary>方法與假設</summary>
+          <div class="formula">吸入劑量 D = I × q × p × t × (1 − 感染者口罩) × (1 − 易感者口罩) / Q
+感染機率 P = 1 − exp(−D)
+預期新感染人數 = 易感者人數 × P</div>
+          <p class="note">Wells–Riley 假設室內空氣完全混合、濃度達穩態、通風量固定。機艙的氣流以分區送風為主，鄰座風險高於遠處座位，完全混合的假設會低估近距離風險、高估遠處風險。</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <section class="tab-panel" id="tab-rm">
+    <div class="grid grid-2">
+      <div class="panel">
+        <div class="field"><label for="rC">室內 CO₂ 濃度（ppm）</label><input id="rC" type="number" value="1200"></div>
+        <div class="field"><label for="rC0">室外 CO₂ 濃度（ppm）</label><input id="rC0" type="number" value="420"></div>
+        <div class="field"><label for="rCa">呼出氣 CO₂ 濃度（ppm）</label><input id="rCa" type="number" value="38000"><div class="hint">約 3.8%。</div></div>
+        <div class="row-2">
+          <div class="field"><label for="rI">感染者人數</label><input id="rI" type="number" value="1"></div>
+          <div class="field"><label for="rN">室內總人數</label><input id="rN" type="number" value="40"></div>
+        </div>
+        <div class="field"><label for="rQ">量子產生率 q（quanta/h）</label><input id="rQ" type="number" step="any" value="25"></div>
+        <div class="field"><label for="rT">暴露時間 t（小時）</label><input id="rT" type="number" step="0.5" value="4"></div>
+        <div class="btn-row"><button class="btn" id="calcRM">計算</button></div>
+      </div>
+      <div>
+        <div class="kpis" id="kpiRM"></div>
+        <div id="chartRM" class="chart short"></div>
+        <details><summary>方法與假設</summary>
+          <div class="formula">再吸入空氣比例 f = (C − C₀) / Cₐ
+感染機率 P = 1 − exp(−f × I × q × t / n)，n 為室內總人數</div>
+          <p class="note">假設 CO₂ 濃度在暴露期間處於穩態，且室內 CO₂ 全部來自在場人員的呼吸。若有其他 CO₂ 來源（燃燒、植物），或空間配有過濾與紫外線殺菌等不影響 CO₂ 的措施，估計會有偏差。</p>
+        </details>
+      </div>
+    </div>
+  </section>
+</main>
+<div id="site-footer"></div>
+<script src="assets/js/epi.js"></script>
+<script src="assets/js/layout.js"></script>
+<script>
+UI.initTabs();
+const PRESETS = {
+  cabin: { wN: 150, wT: 8, wQ: 5400 },
+  bus: { wN: 40, wT: 4, wQ: 600 },
+  ship: { wN: 3, wT: 10, wQ: 60 },
+  rest: { wN: 50, wT: 1.5, wQ: 1500 }
+};
+document.getElementById('wPreset').addEventListener('change', e => {
+  Object.entries(PRESETS[e.target.value]).forEach(([id, v]) => { document.getElementById(id).value = v; });
+  calcWR();
+});
+
+const calcWR = UI.run('calcWR', () => {
+  const o = {
+    I: UI.num('wI', { min: 0, max: 1000 }), q: UI.num('wQuanta', { min: 0 }), p: UI.num('wP', { min: 0.01, max: 10 }),
+    t: UI.num('wT', { min: 0, max: 720 }), Q: UI.num('wQ', { min: 0.01 }),
+    maskI: UI.num('wMI', { min: 0, max: 100 }) / 100, maskS: UI.num('wMS', { min: 0, max: 100 }) / 100
+  };
+  const n = UI.num('wN', { min: 0, int: true }), r = Epi.wellsRiley(o);
+  UI.kpis('kpiWR', [
+    ['吸入劑量（quanta）', UI.fmt(r.dose, 4)],
+    ['每位易感者的感染機率', UI.pct(r.P, 2)],
+    ['預期新感染人數', UI.fmt(n * r.P, 2)]
+  ]);
+  const ts = Array.from({ length: 81 }, (_, i) => i * Math.max(o.t, 1) * 2 / 80);
+  UI.plot('chartWRt', [0.5, 1, 2].map(m => ({
+    x: ts, y: ts.map(t => Epi.wellsRiley({ ...o, t, Q: o.Q * m }).P * 100), mode: 'lines',
+    name: m === 1 ? `目前通風量 ${UI.fmt(o.Q, 0)} m³/h` : `通風量 × ${m}`, line: { width: m === 1 ? 3 : 2, dash: m === 1 ? 'solid' : 'dash' }
+  })), { title: '感染機率與暴露時間', xaxis: { title: '暴露時間（小時）' }, yaxis: { title: '感染機率（%）' } });
+  const Qs = Array.from({ length: 81 }, (_, i) => o.Q * (0.1 + i * 3.9 / 80));
+  UI.plot('chartWRq', [
+    { x: Qs, y: Qs.map(Q => Epi.wellsRiley({ ...o, Q }).P * 100), mode: 'lines', name: '目前口罩設定' },
+    { x: Qs, y: Qs.map(Q => Epi.wellsRiley({ ...o, Q, maskI: 0.5, maskS: 0.5 }).P * 100), mode: 'lines', name: '雙方口罩各 50%', line: { dash: 'dash' } },
+    { x: [o.Q], y: [r.P * 100], mode: 'markers', name: '目前設定', marker: { size: 11, color: '#e07b00' } }
+  ], { title: '感染機率與通風量', xaxis: { title: '通風量（m³/h）' }, yaxis: { title: '感染機率（%）' } });
+});
+calcWR();
+
+UI.run('calcRM', () => {
+  const C = UI.num('rC', { min: 0 }), C0 = UI.num('rC0', { min: 0 }), Ca = UI.num('rCa', { min: 1000 });
+  if (C <= C0) throw new Error('室內 CO₂ 濃度必須高於室外濃度');
+  const I = UI.num('rI', { min: 0 }), n = UI.num('rN', { min: 1, int: true });
+  if (I > n) throw new Error('感染者人數不能超過室內總人數');
+  const q = UI.num('rQ', { min: 0 }), t = UI.num('rT', { min: 0, max: 720 });
+  const r = Epi.rudnickMilton({ C, C0, Ca, I, q, t, n });
+  UI.kpis('kpiRM', [
+    ['再吸入空氣比例 f', UI.pct(r.f, 2)],
+    ['每位易感者的感染機率', UI.pct(r.P, 2)],
+    ['預期新感染人數', UI.fmt((n - I) * r.P, 2)]
+  ]);
+  const Cs = Array.from({ length: 81 }, (_, i) => C0 + 20 + i * (Math.max(3000, C * 1.5) - C0 - 20) / 80);
+  UI.plot('chartRM', [
+    { x: Cs, y: Cs.map(c => Epi.rudnickMilton({ C: c, C0, Ca, I, q, t, n }).P * 100), mode: 'lines', name: '感染機率' },
+    { x: [C], y: [r.P * 100], mode: 'markers', name: '目前設定', marker: { size: 11, color: '#e07b00' } }
+  ], { title: '感染機率與室內 CO₂ 濃度', xaxis: { title: 'CO₂（ppm）' }, yaxis: { title: '感染機率（%）' } });
+})();
+</script>
+</body>
+</html>
