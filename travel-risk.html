@@ -1,1 +1,48 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>多段行程風險｜旅行流行病學工具箱</title>
+<link rel="stylesheet" href="assets/css/style.css">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+</head>
+<body data-page="travel-risk">
+<div id="site-header"></div>
+<section class="hero hero-sm"><div class="inner"><p class="eyebrow">傳染病｜個人風險</p><h1>多段行程風險</h1><p>依行程各段的停留天數與發生率，估算至少發生一次事件的機率，以及防護措施的絕對風險降低與需治療人數。</p></div></section>
+<main id="main" class="container">
+  <div class="warn">表格預設的發生率與防護效力是示例數值，請換成 CDC Yellow Book、WHO 或文獻中與目的地、季節、旅行型態相符的數值。</div>
+  <div class="error" id="error" role="alert" hidden></div>
+  <h2>行程與風險項目</h2>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>項目（目的地或疾病）</th><th>停留天數</th><th>發生率（每千旅客月）</th><th>下限</th><th>上限</th><th>防護效力（%）</th><th></th></tr></thead>
+      <tbody id="legs"></tbody>
+    </table>
+  </div>
+  <div class="btn-row">
+    <button class="btn secondary" id="add">新增一列</button>
+    <button class="btn" id="calc">計算</button>
+    <button class="btn secondary" id="export">匯出 CSV</button>
+  </div>
 
+  <h2>結果</h2>
+  <div class="kpis" id="kpis"></div>
+  <div id="chart" class="chart"></div>
+  <div class="table-wrap" id="out"></div>
+  <details><summary>方法與假設</summary>
+    <div class="formula">每段風險 p = 1 − exp(−r × d / 30)，r 為每位旅客每月發生率（每千旅客月 ÷ 1000），d 為停留天數
+防護後 p' = 1 − exp(−r(1 − e) × d / 30)，e 為防護效力
+絕對風險降低 ARR = p − p'，需治療（接種）人數 NNT = 1 / ARR
+整趟行程至少發生一項：1 − Π(1 − pᵢ)</div>
+    <p class="note">假設發生率在停留期間固定、各項目彼此獨立。區間只反映發生率上下限的不確定性，防護效力以點估計計算。</p>
+  </details>
+</main>
+<div id="site-footer"></div>
+<script src="assets/js/epi.js"></script>
+<script src="assets/js/layout.js"></script>
+<script>
+const COLS = { days: '停留天數', rate: '發生率', lo: '下限', hi: '上限', eff: '防護效力' };
+const rows = [
+  { name: '旅行者腹瀉（示例）', days: 14, rate: 300, lo: 200, hi: 500, eff: 0 },
+  { name: 'A 型肝炎（示例）', days: 14, rate: 0.3, lo
